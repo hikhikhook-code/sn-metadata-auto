@@ -182,7 +182,20 @@ export function useBatchControls() {
             await sleep(settings.retryDelayMs)
             if (cancelRef.current || stoppedByThreshold) return
           }
-          outcome = await processFileOnce(fresh, useMock, settings)
+          try {
+            outcome = await processFileOnce(fresh, useMock, settings)
+          } catch (err) {
+            const message = (err as Error)?.message ?? String(err)
+            outcome = { ok: false, error: `Unexpected error: ${message}` }
+            useAppStore
+              .getState()
+              .addLog(
+                'error',
+                'FAILED',
+                `Worker #${slotId} hit unexpected error on ${fresh.originalFilename}: ${message}`,
+                { fileId: fresh.id }
+              )
+          }
           if (outcome.keyStatusChanges?.length) {
             applyKeyStatusChanges(outcome.keyStatusChanges)
           }
@@ -253,7 +266,16 @@ export function useBatchControls() {
       }
     }
 
-    const workerPromises = Array.from({ length: workerCount }, (_, i) => worker(i + 1))
+    // Defense-in-depth: even if a worker throws unexpectedly outside the
+    // retry-loop try/catch above, we don't want Promise.all to reject and
+    // skip the cleanup that resets isRunning. Each worker's rejection is
+    // logged and swallowed.
+    const workerPromises = Array.from({ length: workerCount }, (_, i) =>
+      worker(i + 1).catch((err: unknown) => {
+        const message = (err as Error)?.message ?? String(err)
+        useAppStore.getState().addLog('error', 'WORKER', `Worker #${i + 1} crashed: ${message}`)
+      })
+    )
     await Promise.all(workerPromises)
 
     if (cancelRef.current) {

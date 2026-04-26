@@ -35,11 +35,16 @@ async function waitForKeyGate(keyId: string, minDelayMs: number): Promise<number
   }
   const last = lastCallTime.get(keyId) ?? 0
   const now = Date.now()
-  const wait = last + minDelayMs - now
+  // Reserve the slot BEFORE awaiting so concurrent callers see this caller's
+  // expected completion time and queue behind it. Without this, multiple
+  // workers reading lastCallTime in the same tick would all compute the same
+  // wait and fire simultaneously, defeating delayBetweenApiCallsMs.
+  const earliest = Math.max(now, last + minDelayMs)
+  lastCallTime.set(keyId, earliest)
+  const wait = earliest - now
   if (wait > 0) {
     await new Promise((r) => setTimeout(r, wait))
   }
-  lastCallTime.set(keyId, Date.now())
   return Math.max(0, wait)
 }
 
