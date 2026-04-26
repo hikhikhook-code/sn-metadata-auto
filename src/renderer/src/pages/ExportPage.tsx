@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import type { AppFile, FileStatus } from '@renderer/types'
-import { FileDown, Eye } from 'lucide-react'
+import { AlertTriangle, FileDown, Eye } from 'lucide-react'
 import { formatDateTime } from '@renderer/utils/format'
+import { TITLE_HARD_MAX, TITLE_RECOMMENDED_MAX } from '@renderer/utils/title'
 
 type Scope = 'all' | 'selected' | 'approved' | 'saved' | 'failed'
 
@@ -44,7 +45,7 @@ export function ExportPage() {
   const [format, setFormat] = useState<'csv' | 'txt' | 'json' | 'xlsx'>('csv')
   const [showPreview, setShowPreview] = useState(false)
 
-  const rows = useMemo(() => {
+  const { rows, dropped, longTitleCount } = useMemo(() => {
     let pool = files
     if (scope === 'selected') pool = files.filter((f) => selected.includes(f.id))
     if (scope === 'approved')
@@ -53,7 +54,26 @@ export function ExportPage() {
       )
     if (scope === 'saved') pool = files.filter((f) => COMPLETE_STATUSES.includes(f.status))
     if (scope === 'failed') pool = files.filter((f) => f.status === 'Failed')
-    return pool.filter((f) => f.aiMetadata || f.editedMetadata).map(fileToRow)
+
+    const withMeta = pool.filter((f) => f.aiMetadata || f.editedMetadata)
+    const droppedFiles: AppFile[] = []
+    let warnTitle = 0
+    const valid: AppFile[] = []
+    for (const f of withMeta) {
+      const m = f.editedMetadata ?? f.aiMetadata
+      const t = (m?.title ?? '').trim()
+      if (t.length === 0 || t.length > TITLE_HARD_MAX) {
+        droppedFiles.push(f)
+        continue
+      }
+      if (t.length > TITLE_RECOMMENDED_MAX) warnTitle++
+      valid.push(f)
+    }
+    return {
+      rows: valid.map(fileToRow),
+      dropped: droppedFiles,
+      longTitleCount: warnTitle
+    }
   }, [files, selected, scope])
 
   async function doExport() {
@@ -129,9 +149,40 @@ export function ExportPage() {
           </div>
         </div>
 
+        {(dropped.length > 0 || longTitleCount > 0) && (
+          <div
+            className="warn-banner"
+            style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}
+          >
+            <AlertTriangle size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {dropped.length > 0 && (
+                <span>
+                  {dropped.length} file(s) skipped — title is empty or longer than {TITLE_HARD_MAX}{' '}
+                  characters:{' '}
+                  <span className="text-muted">
+                    {dropped
+                      .slice(0, 5)
+                      .map((f) => f.originalFilename)
+                      .join(', ')}
+                    {dropped.length > 5 ? `, +${dropped.length - 5} more` : ''}
+                  </span>
+                </span>
+              )}
+              {longTitleCount > 0 && (
+                <span>
+                  {longTitleCount} row(s) have titles longer than {TITLE_RECOMMENDED_MAX} characters
+                  and may be flagged on Adobe Stock.
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <span className="text-soft" style={{ fontSize: 13 }}>
-            {rows.length} row(s) ready to export.
+            {rows.length} row(s) ready to export
+            {dropped.length > 0 ? ` (${dropped.length} skipped)` : ''}.
           </span>
           <div className="row">
             <button

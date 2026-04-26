@@ -14,9 +14,11 @@ import {
   FileSearch,
   Trash2,
   Eye,
-  ListChecks
+  ListChecks,
+  Undo2
 } from 'lucide-react'
 import { formatBytes } from '@renderer/utils/format'
+import { TITLE_RECOMMENDED_MAX, titleStatus } from '@renderer/utils/title'
 
 interface Props {
   file: AppFile
@@ -38,8 +40,12 @@ export function MetadataCard({ file, onRegenerate, onApproveAndRename }: Props) 
 
   const wasRenamed = file.status === 'Renamed' || file.status === 'Exported'
 
+  const tStatus = titleStatus(meta?.title ?? '')
+  const isTitleValid = tStatus.state !== 'empty' && tStatus.state !== 'tooLong'
+
+  const isSaveable = !!meta && isTitleValid
   const isApprovable =
-    !!meta && meta.title.trim().length > 0 && meta.keywords.length > 0 && file.status !== 'Renamed'
+    !!meta && isTitleValid && meta.keywords.length > 0 && file.status !== 'Renamed'
 
   return (
     <div
@@ -128,18 +134,59 @@ export function MetadataCard({ file, onRegenerate, onApproveAndRename }: Props) 
           <div className="label-row">
             <span className="label">
               Title{' '}
-              <InfoIcon content="Microstock-friendly title under 70 chars. Used as filename when approved." />
+              <InfoIcon content="Concise, descriptive title under 70 chars. Used as filename after Approve & Rename." />
             </span>
-            <span className="text-muted" style={{ fontSize: 11 }}>
-              {meta?.title.length ?? 0}/70
+            <span
+              className={
+                tStatus.state === 'empty' || tStatus.state === 'tooLong'
+                  ? 'title-counter title-counter--err'
+                  : tStatus.state === 'warn'
+                    ? 'title-counter title-counter--warn'
+                    : 'title-counter'
+              }
+              style={{ fontSize: 11 }}
+            >
+              {tStatus.count}/{TITLE_RECOMMENDED_MAX}
             </span>
           </div>
           <input
-            className="input"
+            className={`input ${
+              tStatus.state === 'empty' || tStatus.state === 'tooLong'
+                ? 'input--error'
+                : tStatus.state === 'warn'
+                  ? 'input--warn'
+                  : ''
+            }`}
             value={meta?.title ?? ''}
             onChange={(e) => updateEditedMetadata(file.id, { title: e.target.value })}
             placeholder="Generate metadata to populate the title"
+            maxLength={200}
           />
+          {tStatus.message && (
+            <div
+              className={`field-helper ${
+                tStatus.state === 'empty' || tStatus.state === 'tooLong'
+                  ? 'field-helper--error'
+                  : 'field-helper--warn'
+              }`}
+            >
+              {tStatus.message}
+            </div>
+          )}
+          {meta?.titleOriginal && meta.titleOriginal !== meta.title && (
+            <div className="row" style={{ gap: 6, marginTop: 4, fontSize: 11 }}>
+              <span className="text-muted">
+                AI suggested a shorter title. Original ({meta.titleOriginal.length} chars):
+              </span>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => updateEditedMetadata(file.id, { title: meta.titleOriginal! })}
+                title="Replace with the original AI-generated title"
+              >
+                <Undo2 size={12} /> Use original
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="field">
@@ -204,13 +251,35 @@ export function MetadataCard({ file, onRegenerate, onApproveAndRename }: Props) 
         </div>
 
         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          <button className="btn" onClick={() => saveMetadata(file.id)} disabled={!meta}>
+          <button
+            className="btn"
+            onClick={() => saveMetadata(file.id)}
+            disabled={!isSaveable}
+            title={
+              !meta
+                ? 'No metadata to save'
+                : tStatus.state === 'empty'
+                  ? 'Title is required'
+                  : tStatus.state === 'tooLong'
+                    ? tStatus.message
+                    : 'Save edited metadata'
+            }
+          >
             <Save size={14} /> Save
           </button>
           <button
             className="btn btn-success"
             onClick={() => onApproveAndRename(file.id)}
             disabled={!isApprovable}
+            title={
+              file.status === 'Renamed'
+                ? 'Already renamed'
+                : tStatus.state === 'empty'
+                  ? 'Title is required'
+                  : tStatus.state === 'tooLong'
+                    ? tStatus.message
+                    : 'Approve metadata and rename file on disk'
+            }
           >
             <CheckCircle2 size={14} /> Approve &amp; Rename
           </button>
@@ -225,6 +294,9 @@ export function MetadataCard({ file, onRegenerate, onApproveAndRename }: Props) 
 
 export function CompactMetadataRow({ file, onApproveAndRename }: Props) {
   const meta = file.editedMetadata ?? file.aiMetadata
+  const tStatus = titleStatus(meta?.title ?? '')
+  const compactApprovable =
+    !!meta && tStatus.state !== 'empty' && tStatus.state !== 'tooLong' && file.status !== 'Renamed'
   return (
     <div
       className="glass"
@@ -283,7 +355,14 @@ export function CompactMetadataRow({ file, onApproveAndRename }: Props) {
         <button
           className="btn btn-sm btn-success"
           onClick={() => onApproveAndRename(file.id)}
-          disabled={!meta || file.status === 'Renamed'}
+          disabled={!compactApprovable}
+          title={
+            tStatus.state === 'empty'
+              ? 'Title is required'
+              : tStatus.state === 'tooLong'
+                ? tStatus.message
+                : undefined
+          }
         >
           Approve
         </button>

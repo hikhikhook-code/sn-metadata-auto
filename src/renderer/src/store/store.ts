@@ -18,6 +18,7 @@ import type {
 } from '@renderer/types'
 import { buildRenamePreview } from '@renderer/utils/filename'
 import { dedupeKeywords } from '@renderer/utils/keywords'
+import { clampTitleHardMax, cleanAiTitle } from '@renderer/utils/title'
 
 const MAX_API_KEYS = 10
 const PROJECT_VERSION = 1
@@ -273,8 +274,10 @@ export const useAppStore = create<AppState>()(
       set((s) => {
         const f = s.files.find((x) => x.id === id)
         if (!f) return
+        const titleClean = cleanAiTitle(metadata.title)
         const cleaned: Metadata = {
-          title: metadata.title.trim().slice(0, 200),
+          title: titleClean.title,
+          ...(titleClean.titleOriginal ? { titleOriginal: titleClean.titleOriginal } : {}),
           description: metadata.description.trim(),
           keywords: dedupeKeywords(metadata.keywords),
           category: metadata.category.trim()
@@ -298,8 +301,17 @@ export const useAppStore = create<AppState>()(
           keywords: [],
           category: ''
         }
+        const nextTitle =
+          partial.title !== undefined ? clampTitleHardMax(partial.title) : base.title
+        // If user manually changed the title, the AI's titleOriginal hint is
+        // no longer relevant. Clearing it hides the "use original" affordance.
+        const titleOriginal =
+          partial.title !== undefined && partial.title !== base.titleOriginal
+            ? undefined
+            : base.titleOriginal
         const next: Metadata = {
-          title: partial.title ?? base.title,
+          title: nextTitle,
+          ...(titleOriginal ? { titleOriginal } : {}),
           description: partial.description ?? base.description,
           keywords:
             partial.keywords !== undefined ? dedupeKeywords(partial.keywords) : base.keywords,
@@ -327,6 +339,7 @@ export const useAppStore = create<AppState>()(
         if (!f || !f.aiMetadata) return
         f.editedMetadata = {
           title: f.aiMetadata.title,
+          ...(f.aiMetadata.titleOriginal ? { titleOriginal: f.aiMetadata.titleOriginal } : {}),
           description: f.aiMetadata.description,
           keywords: [...f.aiMetadata.keywords],
           category: f.aiMetadata.category
@@ -339,6 +352,12 @@ export const useAppStore = create<AppState>()(
       set((s) => {
         const f = s.files.find((x) => x.id === id)
         if (!f) return
+        const m = f.editedMetadata ?? f.aiMetadata
+        const title = m?.title?.trim() ?? ''
+        // Defensive guard: never persist a Save state with an empty or
+        // hard-over-limit title. The UI also disables Save in these cases,
+        // but this protects against direct calls.
+        if (title.length === 0 || title.length > 200) return
         f.status = 'Saved'
         f.lastEditedAt = new Date().toISOString()
       }),

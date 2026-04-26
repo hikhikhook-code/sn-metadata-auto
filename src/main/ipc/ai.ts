@@ -51,10 +51,18 @@ function buildPrompt(keywordCount: number): string {
 Return ONLY valid JSON with this exact structure (no markdown, no code fence):
 {"title":"","description":"","keywords":[],"category":""}
 
-Rules:
-- Title must be clear, natural, descriptive, and under 70 characters.
-- Title must be suitable for a microstock file name.
-- Description must be one natural sentence describing the visual content accurately.
+Title rules (very important):
+- Be concise and ideally under 70 characters; never exceed 200 characters.
+- Describe the unique visual content in one short, natural phrase.
+- Must NOT be a comma-separated keyword list.
+- Include the most important searchable terms naturally in the phrase.
+- Avoid brand names, logos, copyrighted characters, artist names, trademarks, and misleading terms.
+- Must be suitable for use as a file name (no slashes, no quotes, no leading/trailing punctuation).
+
+Description rules:
+- One natural sentence describing the visual content accurately.
+
+Keyword rules:
 - Generate exactly ${keywordCount} keywords.
 - Put the most important and visually relevant keywords in the first 10 positions.
 - Keywords must be lowercase, no duplicates.
