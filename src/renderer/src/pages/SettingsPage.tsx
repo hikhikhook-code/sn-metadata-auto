@@ -229,6 +229,8 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <ProcessingControlSection />
+
         <div
           className="glass-strong"
           style={{ padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12 }}
@@ -277,6 +279,224 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function clampInt(raw: number, min: number, max: number): number {
+  if (!Number.isFinite(raw)) return min
+  const n = Math.round(raw)
+  return Math.max(min, Math.min(max, n))
+}
+
+function ProcessingControlSection() {
+  const settings = useAppStore((s) => s.settings)
+  const update = useAppStore((s) => s.updateSettings)
+
+  const workerWarning =
+    settings.workerCount > 25
+      ? {
+          tone: 'danger' as const,
+          text: 'Very high worker count is not recommended for most API providers. Use only if you have enough quota and multiple API keys.'
+        }
+      : settings.workerCount > 10
+        ? {
+            tone: 'warning' as const,
+            text: 'High worker count may trigger API rate limits, increase failures, or make processing unstable.'
+          }
+        : null
+
+  return (
+    <div className="glass-strong" style={{ padding: 16 }}>
+      <h3 className="section-title" style={{ fontSize: 14 }}>
+        Processing Control
+      </h3>
+      <p className="section-sub" style={{ marginTop: 2 }}>
+        Concurrency, delays, retries, and rate-limit behavior. Defaults are safe for one API key.
+      </p>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 12,
+          marginTop: 12
+        }}
+      >
+        <div className="field">
+          <span className="label">
+            Worker Count{' '}
+            <InfoIcon content="How many files are processed concurrently. Recommended 1–5. Maximum 50." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={1}
+            max={50}
+            step={1}
+            value={settings.workerCount}
+            onChange={(e) => update({ workerCount: clampInt(Number(e.target.value), 1, 50) })}
+          />
+        </div>
+
+        <div className="field">
+          <span className="label">
+            Delay Between Files (ms){' '}
+            <InfoIcon content="Pause each worker before pulling the next file from the queue." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            max={600000}
+            step={100}
+            value={settings.delayBetweenFilesMs}
+            onChange={(e) =>
+              update({ delayBetweenFilesMs: clampInt(Number(e.target.value), 0, 600000) })
+            }
+          />
+        </div>
+
+        <div className="field">
+          <span className="label">
+            Delay Between API Calls (ms){' '}
+            <InfoIcon content="Minimum time between two requests on the same API key." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            max={600000}
+            step={100}
+            value={settings.delayBetweenApiCallsMs}
+            onChange={(e) =>
+              update({ delayBetweenApiCallsMs: clampInt(Number(e.target.value), 0, 600000) })
+            }
+          />
+        </div>
+
+        <div className="field">
+          <span className="label">
+            Max Retry Attempts{' '}
+            <InfoIcon content="How many times a failed file is retried before being marked Failed." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            max={10}
+            step={1}
+            value={settings.maxRetryAttempts}
+            onChange={(e) => update({ maxRetryAttempts: clampInt(Number(e.target.value), 0, 10) })}
+          />
+        </div>
+
+        <div className="field">
+          <span className="label">
+            Retry Delay (ms) <InfoIcon content="Wait this long before retrying a failed request." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={0}
+            max={600000}
+            step={100}
+            value={settings.retryDelayMs}
+            onChange={(e) => update({ retryDelayMs: clampInt(Number(e.target.value), 0, 600000) })}
+          />
+        </div>
+
+        <div className="field">
+          <span className="label">
+            Rate Limit Cooldown (sec){' '}
+            <InfoIcon content="When an API key returns a rate-limit error, mark it Limited for this many seconds." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={1}
+            max={3600}
+            step={1}
+            value={settings.rateLimitCooldownSec}
+            onChange={(e) =>
+              update({ rateLimitCooldownSec: clampInt(Number(e.target.value), 1, 3600) })
+            }
+          />
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 12,
+          marginTop: 12,
+          alignItems: 'end'
+        }}
+      >
+        <label className="row" style={{ gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={settings.autoSwitchOnLimit}
+            onChange={(e) => update({ autoSwitchOnLimit: e.target.checked })}
+          />
+          Auto Switch API Key on Limit
+        </label>
+
+        <label className="row" style={{ gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={settings.stopOnTooManyFailures}
+            onChange={(e) => update({ stopOnTooManyFailures: e.target.checked })}
+          />
+          Stop on Too Many Failures
+        </label>
+
+        <div className="field">
+          <span className="label">
+            Failure Threshold{' '}
+            <InfoIcon content="Pause the queue after this many consecutive failed files (only if Stop on Too Many Failures is on)." />
+          </span>
+          <input
+            type="number"
+            className="input"
+            min={1}
+            max={1000}
+            step={1}
+            value={settings.failureThreshold}
+            disabled={!settings.stopOnTooManyFailures}
+            onChange={(e) =>
+              update({ failureThreshold: clampInt(Number(e.target.value), 1, 1000) })
+            }
+          />
+        </div>
+      </div>
+
+      {workerWarning && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            borderRadius: 10,
+            fontSize: 12,
+            background:
+              workerWarning.tone === 'danger'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : 'rgba(234, 179, 8, 0.14)',
+            color:
+              workerWarning.tone === 'danger'
+                ? 'var(--c-danger, #b91c1c)'
+                : 'var(--c-warning, #92400e)',
+            border:
+              workerWarning.tone === 'danger'
+                ? '1px solid rgba(239, 68, 68, 0.4)'
+                : '1px solid rgba(234, 179, 8, 0.4)'
+          }}
+        >
+          {workerWarning.text}
+        </div>
+      )}
     </div>
   )
 }
