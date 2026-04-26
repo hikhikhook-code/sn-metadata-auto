@@ -25,9 +25,11 @@ export function SettingsPage() {
   const update = useAppStore((s) => s.updateSettings)
   const showToast = useAppStore((s) => s.showToast)
 
-  const isCustomKeywordCount = !KEYWORD_COUNT_PRESETS.includes(settings.defaultKeywordCount)
+  const valueIsCustom = !KEYWORD_COUNT_PRESETS.includes(settings.defaultKeywordCount)
+  const [forceCustom, setForceCustom] = useState<boolean>(valueIsCustom)
+  const showCustom = valueIsCustom || forceCustom
   const [customDraft, setCustomDraft] = useState<string>(
-    isCustomKeywordCount ? String(settings.defaultKeywordCount) : ''
+    valueIsCustom ? String(settings.defaultKeywordCount) : ''
   )
 
   async function pickFolder() {
