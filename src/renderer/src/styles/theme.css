@@ -1,0 +1,141 @@
+/* SN Metadata Auto — Liquid Glass Theme */
+:root {
+  --c-bg-1: #fff7f0;
+  --c-bg-2: #fde7e0;
+  --c-bg-3: #f3e2ff;
+  --c-bg-4: #ffeede;
+
+  --c-surface: rgba(255, 255, 255, 0.55);
+  --c-surface-strong: rgba(255, 255, 255, 0.75);
+  --c-surface-soft: rgba(255, 255, 255, 0.35);
+  --c-surface-hover: rgba(255, 255, 255, 0.78);
+  --c-border: rgba(255, 255, 255, 0.6);
+  --c-border-strong: rgba(190, 140, 170, 0.25);
+
+  --c-text: #3a2c3d;
+  --c-text-soft: #6c5b6e;
+  --c-text-muted: #9c8a9d;
+
+  --c-accent: #c97a8b; /* rose gold */
+  --c-accent-soft: #efc6c8;
+  --c-accent-strong: #b35e74;
+  --c-accent-2: #b48bd1; /* soft purple */
+  --c-accent-3: #e8a08a; /* peach */
+
+  --c-success: #6aa56b;
+  --c-success-soft: #d8efd8;
+  --c-warning: #d39a4d;
+  --c-warning-soft: #fbe9c8;
+  --c-danger: #c66565;
+  --c-danger-soft: #f6d5d3;
+  --c-info: #9b86bd;
+  --c-info-soft: #e6dcf2;
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 26px;
+
+  --shadow-sm: 0 2px 6px rgba(140, 70, 110, 0.06);
+  --shadow-md: 0 8px 24px rgba(140, 70, 110, 0.08), 0 2px 6px rgba(140, 70, 110, 0.05);
+  --shadow-lg: 0 20px 50px rgba(140, 70, 110, 0.12), 0 6px 16px rgba(140, 70, 110, 0.08);
+
+  --blur: 18px;
+  --font-sans:
+    'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --topbar-h: 56px;
+  --bottombar-h: 38px;
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 64px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.5;
+  background: linear-gradient(
+    135deg,
+    var(--c-bg-1) 0%,
+    var(--c-bg-2) 35%,
+    var(--c-bg-4) 65%,
+    var(--c-bg-3) 100%
+  );
+  background-attachment: fixed;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 200, 220, 0.45), transparent 38%),
+    radial-gradient(circle at 88% 12%, rgba(220, 195, 245, 0.45), transparent 42%),
+    radial-gradient(circle at 78% 92%, rgba(255, 215, 188, 0.4), transparent 40%),
+    radial-gradient(circle at 22% 88%, rgba(255, 230, 200, 0.4), transparent 38%);
+  z-index: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+a {
+  color: var(--c-accent-strong);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(180, 130, 160, 0.25);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 130, 160, 0.45);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}

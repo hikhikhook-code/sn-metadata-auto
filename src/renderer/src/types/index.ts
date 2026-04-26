@@ -1,0 +1,191 @@
+export type FileType =
+  | 'jpg'
+  | 'jpeg'
+  | 'png'
+  | 'webp'
+  | 'mp4'
+  | 'mov'
+  | 'avi'
+  | 'webm'
+  | 'svg'
+  | 'eps'
+
+export const SUPPORTED_EXTS: FileType[] = [
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'mp4',
+  'mov',
+  'avi',
+  'webm',
+  'svg',
+  'eps'
+]
+
+export const IMAGE_EXTS: FileType[] = ['jpg', 'jpeg', 'png', 'webp']
+export const VIDEO_EXTS: FileType[] = ['mp4', 'mov', 'avi', 'webm']
+export const VECTOR_EXTS: FileType[] = ['svg', 'eps']
+
+export type FileStatus =
+  | 'Waiting'
+  | 'Ready'
+  | 'Unsupported'
+  | 'Duplicate'
+  | 'Processing'
+  | 'Generated'
+  | 'Edited'
+  | 'Saved'
+  | 'Need Approval'
+  | 'Approved'
+  | 'Renamed'
+  | 'Exported'
+  | 'Failed'
+  | 'Skipped'
+
+export interface Metadata {
+  title: string
+  description: string
+  keywords: string[]
+  category: string
+}
+
+export interface AppFile {
+  id: string
+  originalPath: string
+  currentPath: string
+  originalFilename: string
+  currentFilename: string
+  fileType: FileType | string
+  fileSize: number
+  previewUrl?: string
+  aiMetadata?: Metadata
+  editedMetadata?: Metadata
+  renamePreview?: string
+  status: FileStatus
+  apiProvider?: string
+  apiKeySlot?: string
+  errorMessage?: string
+  generatedAt?: string
+  lastEditedAt?: string
+  approvedAt?: string
+  renamedAt?: string
+  exportedAt?: string
+}
+
+export type ApiProvider = 'Gemini' | 'OpenAI' | 'Groq' | 'Custom'
+
+export type ApiKeyStatus = 'Untested' | 'Valid' | 'Invalid' | 'Limit' | 'Error' | 'Disabled'
+
+export type ModelCategory =
+  | 'Recommended for Metadata'
+  | 'Vision Support'
+  | 'Text Only'
+  | 'Fast / Cheap'
+  | 'Best Quality'
+  | 'Preview / Experimental'
+  | 'Deprecated / Not Recommended'
+  | 'Image Generation Only'
+  | 'Video Generation Only'
+  | 'Audio Only'
+  | 'Embedding Only'
+
+export interface ModelPreset {
+  id: string
+  label: string
+  category: ModelCategory
+  vision: boolean
+  description?: string
+}
+
+export interface ApiKeyEntry {
+  id: string
+  name: string
+  provider: ApiProvider
+  model: string
+  apiKey: string
+  baseUrl?: string
+  priority: number
+  status: ApiKeyStatus
+  enabled: boolean
+  lastChecked?: string
+  lastError?: string
+  fetchedModels?: ModelPreset[]
+}
+
+export type LogLevel = 'info' | 'success' | 'warning' | 'error'
+
+export type LogCategory =
+  | 'BATCH'
+  | 'PROCESSING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'WARNING'
+  | 'SAVED'
+  | 'APPROVED'
+  | 'RENAMED'
+  | 'EXPORT'
+  | 'API'
+  | 'PROJECT'
+  | 'STOP'
+  | 'RESUME'
+  | 'INFO'
+
+export interface LogEntry {
+  id: string
+  timestamp: string
+  level: LogLevel
+  category: LogCategory
+  message: string
+  fileId?: string
+  apiKeySlot?: string
+}
+
+export type ViewMode = 'comfort' | 'compact'
+
+export interface AppSettings {
+  defaultKeywordCount: number
+  platformPreset: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
+  autoRenameAfterApprove: boolean
+  autoRenameAfterSuccess: boolean
+  keepOriginalBackup: boolean
+  useTitleCase: boolean
+  useLowercaseFilename: boolean
+  replaceSpacesWithHyphen: boolean
+  addNumberIfDuplicate: boolean
+  outputFolder: string
+  autosaveProject: boolean
+  tooltipsEnabled: boolean
+  defaultViewMode: ViewMode
+  logRetention: number
+  apiTimeoutMs: number
+  retryCount: number
+  videoFrameCount: number
+}
+
+export interface BatchState {
+  isRunning: boolean
+  isPaused: boolean
+  currentFileId: string | null
+  successCount: number
+  failedCount: number
+  totalCount: number
+  startedAt: string | null
+}
+
+export interface ProjectState {
+  filePath: string | null
+  name: string
+  lastSavedAt: string | null
+  recentProjects: string[]
+}
+
+export interface SerializedProject {
+  version: number
+  name: string
+  files: AppFile[]
+  apiKeys: ApiKeyEntry[]
+  logs: LogEntry[]
+  settings: AppSettings
+  savedAt: string
+}
