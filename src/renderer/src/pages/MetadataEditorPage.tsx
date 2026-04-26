@@ -6,6 +6,7 @@ import { InfoIcon } from '@renderer/components/ui/Tooltip'
 import { KeywordChipList } from '@renderer/components/keywords/KeywordChipList'
 import { CATEGORIES } from '@renderer/utils/categories'
 import { formatDateTime } from '@renderer/utils/format'
+import { KEYWORD_COUNT_PRESETS } from '@renderer/utils/keywordCount'
 import { Save, RefreshCcw, FileEdit, Sparkles, RotateCcw } from 'lucide-react'
 import { useBatchControls, useRename } from '@renderer/hooks/useBatch'
 
@@ -257,11 +258,13 @@ export function MetadataEditorPage() {
                           .updateSettings({ defaultKeywordCount: Number(e.target.value) })
                       }
                     >
-                      {[30, 40, 49, 50, 100].map((n) => (
-                        <option key={n} value={n}>
-                          Target {n}
-                        </option>
-                      ))}
+                      {Array.from(new Set([...KEYWORD_COUNT_PRESETS, settings.defaultKeywordCount]))
+                        .sort((a, b) => a - b)
+                        .map((n) => (
+                          <option key={n} value={n}>
+                            Target {n}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <KeywordChipList
