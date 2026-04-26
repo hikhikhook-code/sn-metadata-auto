@@ -101,7 +101,8 @@ export function SettingsPage() {
                   aria-label="Custom keyword count"
                   onChange={(e) => setCustomDraft(e.target.value)}
                   onBlur={() => {
-                    const parsed = Number(customDraft)
+                    const trimmed = customDraft.trim()
+                    const parsed = trimmed === '' ? NaN : Number(trimmed)
                     if (!Number.isFinite(parsed)) {
                       setCustomDraft(String(settings.defaultKeywordCount))
                       return
