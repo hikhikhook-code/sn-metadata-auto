@@ -141,6 +141,10 @@ export function TopBar() {
       <Tooltip content="Open Mini Monitor — workers, active key, cooldown.">
         <button
           className="btn btn-sm btn-ghost"
+          // Stop mousedown from reaching MiniMonitor's document-level outside-click
+          // handler; without this, clicking the toggle while the panel is open fires
+          // close-on-mousedown and then toggle-on-click, leaving the panel open.
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setMonitorOpen((v) => !v)}
           aria-label="Toggle Mini Monitor"
           aria-pressed={monitorOpen}
