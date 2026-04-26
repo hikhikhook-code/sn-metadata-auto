@@ -47,17 +47,40 @@ export function SettingsPage() {
               Default Keyword Count{' '}
               <InfoIcon content="Default number of keywords requested from the AI per file." />
             </span>
-            <select
-              className="select"
-              value={settings.defaultKeywordCount}
-              onChange={(e) => update({ defaultKeywordCount: Number(e.target.value) })}
-            >
-              {[30, 40, 49, 50, 100].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <div className="row" style={{ gap: 6 }}>
+              <select
+                className="select"
+                style={{ flex: 1 }}
+                value={
+                  [30, 40, 49, 50].includes(settings.defaultKeywordCount)
+                    ? String(settings.defaultKeywordCount)
+                    : 'custom'
+                }
+                onChange={(e) => {
+                  if (e.target.value === 'custom') return
+                  update({ defaultKeywordCount: Number(e.target.value) })
+                }}
+              >
+                {[30, 40, 49, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+                <option value="custom">Custom…</option>
+              </select>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={200}
+                style={{ width: 100 }}
+                value={settings.defaultKeywordCount}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  if (Number.isFinite(v) && v > 0) update({ defaultKeywordCount: v })
+                }}
+              />
+            </div>
           </div>
 
           <div className="field">
