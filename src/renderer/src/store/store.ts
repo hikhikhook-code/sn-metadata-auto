@@ -118,7 +118,7 @@ export interface AppState {
   applyAiMetadata: (id: string, metadata: Metadata, apiProvider: string, apiKeySlot: string) => void
   updateEditedMetadata: (id: string, partial: Partial<Metadata>) => void
   resetToAi: (id: string) => void
-  saveMetadata: (id: string) => void
+  saveMetadata: (id: string) => boolean
   approveMetadata: (id: string) => void
   applyRenameResult: (id: string, newPath: string, newFilename: string) => void
   setRenamePreview: (id: string, preview: string) => void
@@ -348,19 +348,23 @@ export const useAppStore = create<AppState>()(
         f.status = 'Generated'
         f.lastEditedAt = new Date().toISOString()
       }),
-    saveMetadata: (id) =>
+    saveMetadata: (id) => {
+      // Validate before mutating so we can report success/failure to callers.
+      // The UI also disables Save when the title is invalid, but this guard
+      // protects against direct calls / race conditions.
+      const f = get().files.find((x) => x.id === id)
+      if (!f) return false
+      const m = f.editedMetadata ?? f.aiMetadata
+      const title = m?.title?.trim() ?? ''
+      if (title.length === 0 || title.length > 200) return false
       set((s) => {
-        const f = s.files.find((x) => x.id === id)
-        if (!f) return
-        const m = f.editedMetadata ?? f.aiMetadata
-        const title = m?.title?.trim() ?? ''
-        // Defensive guard: never persist a Save state with an empty or
-        // hard-over-limit title. The UI also disables Save in these cases,
-        // but this protects against direct calls.
-        if (title.length === 0 || title.length > 200) return
-        f.status = 'Saved'
-        f.lastEditedAt = new Date().toISOString()
-      }),
+        const ff = s.files.find((x) => x.id === id)
+        if (!ff) return
+        ff.status = 'Saved'
+        ff.lastEditedAt = new Date().toISOString()
+      })
+      return true
+    },
     approveMetadata: (id) =>
       set((s) => {
         const f = s.files.find((x) => x.id === id)

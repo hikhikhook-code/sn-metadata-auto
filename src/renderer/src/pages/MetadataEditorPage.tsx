@@ -299,8 +299,12 @@ export function MetadataEditorPage() {
                           disabled={disabled}
                           title={disabled ? ts.message : 'Save edited metadata'}
                           onClick={() => {
-                            saveMetadata(file.id)
-                            showToast('success', 'Saved')
+                            const ok = saveMetadata(file.id)
+                            if (ok) {
+                              showToast('success', 'Saved')
+                            } else {
+                              showToast('error', 'Cannot save — fix the title first')
+                            }
                           }}
                         >
                           <Save size={14} /> Save Changes
@@ -356,8 +360,12 @@ export function MetadataEditorPage() {
                               : 'Save the current keyword order'
                           }
                           onClick={() => {
-                            saveMetadata(file.id)
-                            showToast('success', 'Keyword order saved')
+                            const ok = saveMetadata(file.id)
+                            if (ok) {
+                              showToast('success', 'Keyword order saved')
+                            } else {
+                              showToast('error', 'Cannot save — fix the title first')
+                            }
                           }}
                         >
                           <Save size={14} /> Save Keyword Order
