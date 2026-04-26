@@ -131,6 +131,8 @@ export function SettingsPage() {
                 if (preset.value === 'Custom') {
                   update({ platformPreset: preset.value })
                 } else {
+                  setForceCustom(false)
+                  setCustomDraft('')
                   update({ platformPreset: preset.value, defaultKeywordCount: preset.keywords })
                 }
               }}
