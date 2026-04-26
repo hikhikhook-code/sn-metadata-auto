@@ -1,6 +1,13 @@
 import { useAppStore } from '@renderer/store/store'
 import { InfoIcon } from '@renderer/components/ui/Tooltip'
 import { FolderOpen } from 'lucide-react'
+import { useState } from 'react'
+import {
+  KEYWORD_COUNT_PRESETS,
+  KEYWORD_COUNT_MIN,
+  KEYWORD_COUNT_MAX,
+  clampKeywordCount
+} from '@renderer/utils/keywordCount'
 
 const PLATFORM_PRESETS: Array<{
   value: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
@@ -17,6 +24,13 @@ export function SettingsPage() {
   const settings = useAppStore((s) => s.settings)
   const update = useAppStore((s) => s.updateSettings)
   const showToast = useAppStore((s) => s.showToast)
+
+  const valueIsCustom = !KEYWORD_COUNT_PRESETS.includes(settings.defaultKeywordCount)
+  const [forceCustom, setForceCustom] = useState<boolean>(valueIsCustom)
+  const showCustom = valueIsCustom || forceCustom
+  const [customDraft, setCustomDraft] = useState<string>(
+    valueIsCustom ? String(settings.defaultKeywordCount) : ''
+  )
 
   async function pickFolder() {
     const res = await window.api.selectFolderPath()
@@ -45,41 +59,65 @@ export function SettingsPage() {
           <div className="field">
             <span className="label">
               Default Keyword Count{' '}
-              <InfoIcon content="Default number of keywords requested from the AI per file." />
+              <InfoIcon
+                content={`Default number of keywords requested from the AI per file. Pick a preset or choose Custom… to enter any value between ${KEYWORD_COUNT_MIN} and ${KEYWORD_COUNT_MAX}.`}
+              />
             </span>
             <div className="row" style={{ gap: 6 }}>
               <select
                 className="select"
-                style={{ flex: 1 }}
-                value={
-                  [30, 40, 49, 50].includes(settings.defaultKeywordCount)
-                    ? String(settings.defaultKeywordCount)
-                    : 'custom'
-                }
+                value={showCustom ? 'custom' : String(settings.defaultKeywordCount)}
                 onChange={(e) => {
-                  if (e.target.value === 'custom') return
-                  update({ defaultKeywordCount: Number(e.target.value) })
+                  const v = e.target.value
+                  if (v === 'custom') {
+                    setForceCustom(true)
+                    if (customDraft.trim() === '') {
+                      setCustomDraft(String(settings.defaultKeywordCount))
+                    }
+                  } else {
+                    setForceCustom(false)
+                    setCustomDraft('')
+                    update({ defaultKeywordCount: Number(v) })
+                  }
                 }}
               >
-                {[30, 40, 49, 50].map((n) => (
+                {KEYWORD_COUNT_PRESETS.map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
                 <option value="custom">Custom…</option>
               </select>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={200}
-                style={{ width: 100 }}
-                value={settings.defaultKeywordCount}
-                onChange={(e) => {
-                  const v = Number(e.target.value)
-                  if (Number.isFinite(v) && v > 0) update({ defaultKeywordCount: v })
-                }}
-              />
+              {showCustom && (
+                <input
+                  type="number"
+                  className="input"
+                  style={{ width: 96 }}
+                  min={KEYWORD_COUNT_MIN}
+                  max={KEYWORD_COUNT_MAX}
+                  step={1}
+                  value={customDraft}
+                  placeholder={`${KEYWORD_COUNT_MIN}–${KEYWORD_COUNT_MAX}`}
+                  aria-label="Custom keyword count"
+                  onChange={(e) => setCustomDraft(e.target.value)}
+                  onBlur={() => {
+                    const trimmed = customDraft.trim()
+                    const parsed = trimmed === '' ? NaN : Number(trimmed)
+                    if (!Number.isFinite(parsed)) {
+                      setCustomDraft(String(settings.defaultKeywordCount))
+                      return
+                    }
+                    const next = clampKeywordCount(parsed)
+                    setCustomDraft(String(next))
+                    if (next !== settings.defaultKeywordCount) {
+                      update({ defaultKeywordCount: next })
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                  }}
+                />
+              )}
             </div>
           </div>
 
@@ -90,8 +128,14 @@ export function SettingsPage() {
               value={settings.platformPreset}
               onChange={(e) => {
                 const preset = PLATFORM_PRESETS.find((p) => p.value === e.target.value)
-                if (preset)
+                if (!preset) return
+                if (preset.value === 'Custom') {
+                  update({ platformPreset: preset.value })
+                } else {
+                  setForceCustom(false)
+                  setCustomDraft('')
                   update({ platformPreset: preset.value, defaultKeywordCount: preset.keywords })
+                }
               }}
             >
               {PLATFORM_PRESETS.map((p) => (
