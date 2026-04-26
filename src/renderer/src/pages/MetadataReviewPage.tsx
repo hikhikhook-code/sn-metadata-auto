@@ -3,15 +3,16 @@ import { useAppStore } from '@renderer/store/store'
 import { MetadataCard, CompactMetadataRow } from '@renderer/components/metadata/MetadataCard'
 import { useBatchControls, useRename } from '@renderer/hooks/useBatch'
 import { Tooltip } from '@renderer/components/ui/Tooltip'
-import { LayoutGrid, Rows3, Sparkles } from 'lucide-react'
+import { LayoutGrid, Rows3, Sparkles, RotateCcw } from 'lucide-react'
 
 export function MetadataReviewPage() {
   const files = useAppStore((s) => s.files)
   const viewMode = useAppStore((s) => s.ui.viewMode)
   const setViewMode = useAppStore((s) => s.setViewMode)
   const setActivePage = useAppStore((s) => s.setActivePage)
-  const { regenerateOne } = useBatchControls()
+  const { regenerateOne, regenerateFailed } = useBatchControls()
   const rename = useRename()
+  const failedCount = files.filter((f) => f.status === 'Failed').length
 
   const items = useMemo(
     () =>
@@ -33,6 +34,13 @@ export function MetadataReviewPage() {
           </p>
         </div>
         <div className="row">
+          {failedCount > 0 && (
+            <Tooltip content="Regenerate metadata for every Failed file.">
+              <button className="btn btn-sm btn-warning" onClick={() => void regenerateFailed()}>
+                <RotateCcw size={14} /> Regenerate Failed ({failedCount})
+              </button>
+            </Tooltip>
+          )}
           <Tooltip content="Comfort view — full editable card per file.">
             <button
               className={`btn btn-sm ${viewMode === 'comfort' ? 'btn-primary' : ''}`}

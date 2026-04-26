@@ -176,7 +176,13 @@ export function ApiKeysPage() {
             to call Gemini / OpenAI / Groq for real metadata.
           </p>
         </div>
-      ) : (
+      ) : !apiKeys.some((k) => k.enabled && k.apiKey) ? (
+        <div className="warn-banner">
+          You have keys configured but none are enabled with a value — the built-in{' '}
+          <strong>Mock provider</strong> will be used until at least one key is enabled.
+        </div>
+      ) : null}
+      {apiKeys.length > 0 && (
         <div className="page-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {apiKeys.map((k) => {
             const c = STATUS_COLORS[k.status]
