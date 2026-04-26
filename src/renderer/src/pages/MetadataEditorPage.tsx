@@ -343,15 +343,27 @@ export function MetadataEditorPage() {
                     onChange={(next) => updateEdited(file.id, { keywords: next })}
                   />
                   <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        saveMetadata(file.id)
-                        showToast('success', 'Keyword order saved')
-                      }}
-                    >
-                      <Save size={14} /> Save Keyword Order
-                    </button>
+                    {(() => {
+                      const ts = titleStatus(meta.title)
+                      const disabled = ts.state === 'empty' || ts.state === 'tooLong'
+                      return (
+                        <button
+                          className="btn btn-primary"
+                          disabled={disabled}
+                          title={
+                            disabled
+                              ? `Cannot save — ${ts.message.toLowerCase()}`
+                              : 'Save the current keyword order'
+                          }
+                          onClick={() => {
+                            saveMetadata(file.id)
+                            showToast('success', 'Keyword order saved')
+                          }}
+                        >
+                          <Save size={14} /> Save Keyword Order
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )}

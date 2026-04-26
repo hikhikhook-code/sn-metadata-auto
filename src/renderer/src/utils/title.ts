@@ -10,7 +10,10 @@ export interface TitleStatus {
 }
 
 export function titleStatus(raw: string): TitleStatus {
-  const text = raw ?? ''
+  // Trim before evaluating so that whitespace-only titles are treated as
+  // empty, matching the save / rename guards in store and useBatch which
+  // also trim before validating.
+  const text = (raw ?? '').trim()
   const count = text.length
   if (count === 0) {
     return { state: 'empty', count, message: 'Title is required.' }
