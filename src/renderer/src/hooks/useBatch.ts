@@ -256,9 +256,10 @@ export function useBatchControls() {
 
           if (
             settings.stopOnTooManyFailures &&
-            // Use ?? so a manually-edited project with failureThreshold===0 doesn't
-            // collapse to "stop on first failure" via the || fallback.
-            useAppStore.getState().batch.consecutiveFailures >= (settings.failureThreshold ?? 5)
+            // Use || so a manually-edited project with failureThreshold===0 falls
+            // back to the default (5) instead of stopping on the first failure
+            // (consecutiveFailures >= 0 is always true once we reach this branch).
+            useAppStore.getState().batch.consecutiveFailures >= (settings.failureThreshold || 5)
           ) {
             stoppedByThreshold = true
             useAppStore
