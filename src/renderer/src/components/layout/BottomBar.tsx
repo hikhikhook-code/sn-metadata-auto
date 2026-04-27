@@ -1,9 +1,18 @@
+import { useEffect, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
-import { CheckCircle2, AlertCircle, Activity } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Activity, Users, Timer } from 'lucide-react'
 
 export function BottomBar() {
   const batch = useAppStore((s) => s.batch)
   const files = useAppStore((s) => s.files)
+  const apiKeys = useAppStore((s) => s.apiKeys)
+  const workerCount = useAppStore((s) => s.settings.workerCount)
+
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const currentFile = files.find((f) => f.id === batch.currentFileId)
   const total = batch.totalCount || files.length || 1
@@ -26,6 +35,18 @@ export function BottomBar() {
               100
           )
         : 0
+
+  const activeWorkers = batch.workers.filter((w) => w.fileId !== null)
+  const totalWorkers = batch.workers.length || workerCount
+  const showWorkerCount = batch.isRunning || batch.isPaused
+
+  const cooldownKeys = apiKeys.filter(
+    (k) => k.cooldownUntil && new Date(k.cooldownUntil).getTime() > now
+  )
+  const firstCooldown = cooldownKeys[0]
+  const cooldownRemaining = firstCooldown?.cooldownUntil
+    ? Math.max(0, Math.ceil((new Date(firstCooldown.cooldownUntil).getTime() - now) / 1000))
+    : 0
 
   return (
     <footer
@@ -88,9 +109,11 @@ export function BottomBar() {
         <Activity size={13} />
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {batch.isRunning
-            ? currentFile
-              ? `Processing ${currentFile.originalFilename}`
-              : 'Running…'
+            ? activeWorkers.length > 1
+              ? `Processing ${activeWorkers.length} file${activeWorkers.length === 1 ? '' : 's'}…`
+              : currentFile
+                ? `Processing ${currentFile.originalFilename}`
+                : 'Running…'
             : batch.isPaused
               ? `Paused at ${currentFile?.originalFilename ?? '—'}`
               : files.length === 0
@@ -98,6 +121,35 @@ export function BottomBar() {
                 : `Idle · ${files.length} file${files.length === 1 ? '' : 's'} loaded`}
         </span>
       </div>
+
+      {showWorkerCount && (
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c-text-soft)' }}
+          title="Active workers"
+        >
+          <Users size={13} />
+          <span>
+            Workers {activeWorkers.length}/{totalWorkers}
+          </span>
+        </div>
+      )}
+
+      {firstCooldown && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            color: 'var(--c-warning, #92400e)'
+          }}
+          title={`${firstCooldown.provider} Key ${firstCooldown.priority} is in cooldown`}
+        >
+          <Timer size={13} />
+          <span>
+            {firstCooldown.provider} Key {firstCooldown.priority} cooldown {cooldownRemaining}s
+          </span>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c-success)' }}>
         <CheckCircle2 size={13} />

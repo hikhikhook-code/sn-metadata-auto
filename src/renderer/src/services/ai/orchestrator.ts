@@ -1,5 +1,12 @@
-import type { ApiKeyEntry, AppFile, Metadata } from '@renderer/types'
+import type { ApiKeyEntry, ApiKeyStatus, AppFile, Metadata } from '@renderer/types'
 import { mockGenerate } from './mock'
+
+export interface KeyStatusChange {
+  id: string
+  status: ApiKeyStatus
+  lastError?: string
+  cooldownUntil?: string
+}
 
 export interface GenerateOutcome {
   ok: boolean
@@ -7,12 +14,42 @@ export interface GenerateOutcome {
   apiProvider?: string
   apiKeySlot?: string
   error?: string
-  keyStatusChange?: { id: string; status: ApiKeyEntry['status']; lastError?: string }
+  keyStatusChanges?: KeyStatusChange[]
+  rateLimitedAll?: boolean
 }
 
 interface OrchestrateOptions {
   useMock: boolean
   keywordCount: number
+  delayBetweenApiCallsMs: number
+  rateLimitCooldownSec: number
+  autoSwitchOnLimit: boolean
+}
+
+const lastCallTime = new Map<string, number>()
+
+async function waitForKeyGate(keyId: string, minDelayMs: number): Promise<number> {
+  if (minDelayMs <= 0) {
+    lastCallTime.set(keyId, Date.now())
+    return 0
+  }
+  const last = lastCallTime.get(keyId) ?? 0
+  const now = Date.now()
+  // Reserve the slot BEFORE awaiting so concurrent callers see this caller's
+  // expected completion time and queue behind it. Without this, multiple
+  // workers reading lastCallTime in the same tick would all compute the same
+  // wait and fire simultaneously, defeating delayBetweenApiCallsMs.
+  const earliest = Math.max(now, last + minDelayMs)
+  lastCallTime.set(keyId, earliest)
+  const wait = earliest - now
+  if (wait > 0) {
+    await new Promise((r) => setTimeout(r, wait))
+  }
+  return Math.max(0, wait)
+}
+
+export function resetKeyGate(): void {
+  lastCallTime.clear()
 }
 
 export async function generateForFile(
@@ -21,7 +58,6 @@ export async function generateForFile(
   opts: OrchestrateOptions
 ): Promise<GenerateOutcome> {
   if (opts.useMock || apiKeys.length === 0) {
-    // Simulate a network delay
     await new Promise((r) => setTimeout(r, 250 + Math.random() * 600))
     const metadata = mockGenerate(file.originalFilename, opts.keywordCount)
     return {
@@ -32,18 +68,31 @@ export async function generateForFile(
     }
   }
 
-  const sorted = [...apiKeys]
+  const now = Date.now()
+  const usable = [...apiKeys]
     .filter((k) => k.enabled && k.apiKey && k.status !== 'Disabled' && k.status !== 'Invalid')
+    .filter((k) => {
+      if (!k.cooldownUntil) return true
+      return new Date(k.cooldownUntil).getTime() <= now
+    })
     .sort((a, b) => a.priority - b.priority)
 
-  if (sorted.length === 0) {
-    return { ok: false, error: 'No usable API keys configured' }
+  if (usable.length === 0) {
+    return {
+      ok: false,
+      error: 'No usable API keys (all in cooldown or limited)',
+      rateLimitedAll: true
+    }
   }
 
+  const keysToTry = opts.autoSwitchOnLimit ? usable : usable.slice(0, 1)
+  const keyStatusChanges: KeyStatusChange[] = []
   let lastError = ''
-  for (const key of sorted) {
+
+  for (const key of keysToTry) {
+    await waitForKeyGate(key.id, opts.delayBetweenApiCallsMs)
+    const slot = `${key.provider} Key ${key.priority}`
     try {
-      const slot = `${key.provider} Key ${key.priority}`
       const res = await window.api.ai.generate({
         provider: key.provider,
         apiKey: key.apiKey,
@@ -58,30 +107,37 @@ export async function generateForFile(
           ok: true,
           metadata: res.metadata,
           apiProvider: key.provider,
-          apiKeySlot: slot
+          apiKeySlot: slot,
+          keyStatusChanges: keyStatusChanges.length ? keyStatusChanges : undefined
         }
       }
       lastError = res.error ?? 'Unknown error'
       if (res.status === 'Limit') {
-        return {
-          ok: false,
-          error: lastError,
-          keyStatusChange: { id: key.id, status: 'Limit', lastError }
-        }
+        const cooldownUntil = new Date(Date.now() + opts.rateLimitCooldownSec * 1000).toISOString()
+        keyStatusChanges.push({
+          id: key.id,
+          status: 'Limit',
+          lastError,
+          cooldownUntil
+        })
+        continue
       }
       if (res.status === 'Invalid') {
-        // mark and try next
-        return {
-          ok: false,
-          error: lastError,
-          keyStatusChange: { id: key.id, status: 'Invalid', lastError }
-        }
+        keyStatusChanges.push({ id: key.id, status: 'Invalid', lastError })
+        continue
       }
-      // For generic errors continue to next key
+      // generic error: try next key (no status change)
     } catch (e) {
       lastError = (e as Error).message
     }
   }
 
-  return { ok: false, error: lastError || 'All API keys failed' }
+  const allLimited =
+    keyStatusChanges.length > 0 && keyStatusChanges.every((c) => c.status === 'Limit')
+  return {
+    ok: false,
+    error: lastError || 'All API keys failed',
+    keyStatusChanges: keyStatusChanges.length ? keyStatusChanges : undefined,
+    rateLimitedAll: allLimited
+  }
 }

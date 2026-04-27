@@ -111,6 +111,8 @@ export interface ApiKeyEntry {
   lastChecked?: string
   lastError?: string
   fetchedModels?: ModelPreset[]
+  /** ISO timestamp; while now() < cooldownUntil the key is treated as Limited and skipped. */
+  cooldownUntil?: string
 }
 
 export type LogLevel = 'info' | 'success' | 'warning' | 'error'
@@ -130,6 +132,10 @@ export type LogCategory =
   | 'STOP'
   | 'RESUME'
   | 'INFO'
+  | 'WORKER'
+  | 'DELAY'
+  | 'RETRY'
+  | 'COOLDOWN'
 
 export interface LogEntry {
   id: string
@@ -161,6 +167,23 @@ export interface AppSettings {
   apiTimeoutMs: number
   retryCount: number
   videoFrameCount: number
+  // Processing Control
+  workerCount: number
+  delayBetweenFilesMs: number
+  delayBetweenApiCallsMs: number
+  retryDelayMs: number
+  maxRetryAttempts: number
+  rateLimitCooldownSec: number
+  autoSwitchOnLimit: boolean
+  stopOnTooManyFailures: boolean
+  failureThreshold: number
+}
+
+export interface BatchWorkerSlot {
+  id: number
+  fileId: string | null
+  fileName: string | null
+  apiKeySlot: string | null
 }
 
 export interface BatchState {
@@ -171,6 +194,8 @@ export interface BatchState {
   failedCount: number
   totalCount: number
   startedAt: string | null
+  workers: BatchWorkerSlot[]
+  consecutiveFailures: number
 }
 
 export interface ProjectState {

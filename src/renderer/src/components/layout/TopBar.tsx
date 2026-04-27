@@ -1,10 +1,13 @@
-import { Play, Pause, Square, FileDown, FolderOpen, Save } from 'lucide-react'
+import { Play, Pause, Square, FileDown, FolderOpen, Save, Activity } from 'lucide-react'
+import { useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import { Tooltip } from '../ui/Tooltip'
 import { useBatchControls } from '@renderer/hooks/useBatch'
 import { useProjectActions } from '@renderer/hooks/useProject'
+import { MiniMonitor } from './MiniMonitor'
 
 export function TopBar() {
+  const [monitorOpen, setMonitorOpen] = useState(false)
   const apiKeys = useAppStore((s) => s.apiKeys)
   const batch = useAppStore((s) => s.batch)
   const project = useAppStore((s) => s.project)
@@ -135,6 +138,21 @@ export function TopBar() {
         </button>
       </Tooltip>
 
+      <Tooltip content="Open Mini Monitor — workers, active key, cooldown.">
+        <button
+          className="btn btn-sm btn-ghost"
+          // Stop mousedown from reaching MiniMonitor's document-level outside-click
+          // handler; without this, clicking the toggle while the panel is open fires
+          // close-on-mousedown and then toggle-on-click, leaving the panel open.
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => setMonitorOpen((v) => !v)}
+          aria-label="Toggle Mini Monitor"
+          aria-pressed={monitorOpen}
+        >
+          <Activity size={14} /> Monitor
+        </button>
+      </Tooltip>
+
       <Tooltip content="Quick export — opens Export page with the current metadata ready to save.">
         <button
           className="btn btn-sm"
@@ -154,6 +172,8 @@ export function TopBar() {
           <FileDown size={14} /> Quick Export
         </button>
       </Tooltip>
+
+      <MiniMonitor open={monitorOpen} onClose={() => setMonitorOpen(false)} />
     </header>
   )
 }

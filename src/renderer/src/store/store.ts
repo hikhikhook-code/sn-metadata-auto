@@ -39,7 +39,16 @@ const DEFAULT_SETTINGS: AppSettings = {
   logRetention: 5000,
   apiTimeoutMs: 60000,
   retryCount: 2,
-  videoFrameCount: 3
+  videoFrameCount: 3,
+  workerCount: 1,
+  delayBetweenFilesMs: 2000,
+  delayBetweenApiCallsMs: 3000,
+  retryDelayMs: 10000,
+  maxRetryAttempts: 2,
+  rateLimitCooldownSec: 60,
+  autoSwitchOnLimit: true,
+  stopOnTooManyFailures: false,
+  failureThreshold: 5
 }
 
 const INITIAL_BATCH: BatchState = {
@@ -49,7 +58,9 @@ const INITIAL_BATCH: BatchState = {
   successCount: 0,
   failedCount: 0,
   totalCount: 0,
-  startedAt: null
+  startedAt: null,
+  workers: [],
+  consecutiveFailures: 0
 }
 
 const INITIAL_PROJECT: ProjectState = {
@@ -449,6 +460,8 @@ export const useAppStore = create<AppState>()(
         s.batch.startedAt = null
         s.batch.isRunning = false
         s.batch.isPaused = false
+        s.batch.workers = []
+        s.batch.consecutiveFailures = 0
       }),
 
     setProjectName: (name) =>

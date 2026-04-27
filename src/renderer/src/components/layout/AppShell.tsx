@@ -11,13 +11,14 @@ import { LogsPage } from '@renderer/pages/LogsPage'
 import { ExportPage } from '@renderer/pages/ExportPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { Toast } from '../ui/Toast'
-import { useAutoSave } from '@renderer/hooks/useBatch'
+import { useAutoSave, useCooldownTicker } from '@renderer/hooks/useBatch'
 import { useProjectActions } from '@renderer/hooks/useProject'
 
 export function AppShell() {
   const active = useAppStore((s) => s.ui.activePage)
   const { restoreLastSession } = useProjectActions()
   useAutoSave()
+  useCooldownTicker()
 
   useEffect(() => {
     void restoreLastSession()

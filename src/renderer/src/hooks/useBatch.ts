@@ -1,8 +1,59 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@renderer/store/store'
-import { generateForFile } from '@renderer/services/ai/orchestrator'
+import { generateForFile, resetKeyGate } from '@renderer/services/ai/orchestrator'
+import type { AppFile, AppSettings, BatchWorkerSlot } from '@renderer/types'
+import type { GenerateOutcome, KeyStatusChange } from '@renderer/services/ai/orchestrator'
 
 const STOP_SENTINEL = { __stopped: true }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, Math.max(0, ms)))
+}
+
+function applyKeyStatusChanges(changes: KeyStatusChange[]): void {
+  if (!changes.length) return
+  const store = useAppStore.getState()
+  for (const change of changes) {
+    const key = store.apiKeys.find((k) => k.id === change.id)
+    const slotName = key ? `${key.provider} Key ${key.priority}` : change.id
+    store.updateApiKey(change.id, {
+      status: change.status,
+      lastError: change.lastError,
+      lastChecked: new Date().toISOString(),
+      cooldownUntil: change.cooldownUntil
+    })
+    if (change.status === 'Limit') {
+      store.addLog(
+        'warning',
+        'COOLDOWN',
+        `Rate limit detected on ${slotName}; cooldown started${
+          change.cooldownUntil
+            ? ` until ${new Date(change.cooldownUntil).toLocaleTimeString()}`
+            : ''
+        }`,
+        { apiKeySlot: slotName }
+      )
+    } else if (change.status === 'Invalid') {
+      store.addLog('error', 'API', `Key ${slotName} marked Invalid: ${change.lastError ?? ''}`, {
+        apiKeySlot: slotName
+      })
+    }
+  }
+}
+
+async function processFileOnce(
+  file: AppFile,
+  useMock: boolean,
+  settings: AppSettings
+): Promise<GenerateOutcome> {
+  return generateForFile(file, useAppStore.getState().apiKeys, {
+    useMock,
+    keywordCount: settings.defaultKeywordCount,
+    delayBetweenApiCallsMs: settings.delayBetweenApiCallsMs,
+    rateLimitCooldownSec: settings.rateLimitCooldownSec,
+    autoSwitchOnLimit: settings.autoSwitchOnLimit
+  })
+}
 
 export function useBatchControls() {
   const cancelRef = useRef(false)
@@ -11,6 +62,7 @@ export function useBatchControls() {
     const store = useAppStore.getState()
     if (store.batch.isRunning) return
     cancelRef.current = false
+    resetKeyGate()
 
     const queue = (
       onlyIds ? store.files.filter((f) => onlyIds.includes(f.id)) : store.files
@@ -27,6 +79,15 @@ export function useBatchControls() {
       return
     }
 
+    const settings = store.settings
+    const workerCount = Math.max(1, Math.min(50, settings.workerCount || 1))
+    const initialWorkers: BatchWorkerSlot[] = Array.from({ length: workerCount }, (_, i) => ({
+      id: i + 1,
+      fileId: null,
+      fileName: null,
+      apiKeySlot: null
+    }))
+
     const startedAt = new Date().toISOString()
     store.setBatch({
       isRunning: true,
@@ -35,100 +96,215 @@ export function useBatchControls() {
       failedCount: 0,
       totalCount: queue.length,
       startedAt,
-      currentFileId: null
+      currentFileId: null,
+      workers: initialWorkers,
+      consecutiveFailures: 0
     })
 
-    store.addLog('info', 'BATCH', `Batch started — ${queue.length} file(s)`)
+    store.addLog(
+      'info',
+      'BATCH',
+      `Batch started — ${queue.length} file(s) · ${workerCount} worker${workerCount === 1 ? '' : 's'}`
+    )
 
-    const useMock = store.apiKeys.filter((k) => k.enabled && k.apiKey).length === 0
+    const useMock = useAppStore.getState().apiKeys.filter((k) => k.enabled && k.apiKey).length === 0
 
-    for (const file of queue) {
-      if (cancelRef.current) {
-        useAppStore
-          .getState()
-          .addLog('warning', 'STOP', `Batch stopped at ${file.originalFilename}`)
-        useAppStore.getState().setBatch({ isRunning: false, isPaused: true })
-        return STOP_SENTINEL
-      }
-      const fresh = useAppStore.getState().files.find((f) => f.id === file.id)
-      if (!fresh) continue
-      // skip if already completed
-      if (
-        fresh.status === 'Renamed' ||
-        fresh.status === 'Approved' ||
-        fresh.status === 'Saved' ||
-        fresh.status === 'Generated' ||
-        fresh.status === 'Edited'
-      ) {
-        if (!onlyIds) continue
-      }
+    let queueIdx = 0
+    let stoppedByThreshold = false
 
-      useAppStore.getState().setBatch({ currentFileId: fresh.id })
-      useAppStore.getState().setFileStatus(fresh.id, 'Processing')
-      const slot = `${useMock ? 'Mock' : 'Auto'}`
-      useAppStore
-        .getState()
-        .addLog('info', 'PROCESSING', `${fresh.originalFilename} — using ${slot}`, {
-          fileId: fresh.id
-        })
+    const setWorker = (slotId: number, partial: Partial<BatchWorkerSlot>): void => {
+      const cur = useAppStore.getState().batch.workers
+      const next = cur.map((w) => (w.id === slotId ? { ...w, ...partial } : w))
+      useAppStore.getState().setBatch({ workers: next })
+    }
 
-      try {
-        const out = await generateForFile(fresh, useAppStore.getState().apiKeys, {
-          useMock,
-          keywordCount: useAppStore.getState().settings.defaultKeywordCount
-        })
+    const worker = async (slotId: number): Promise<void> => {
+      let firstFile = true
+      while (true) {
+        if (cancelRef.current || stoppedByThreshold) return
+        const myIdx = queueIdx++
+        if (myIdx >= queue.length) return
+        const file = queue[myIdx]
+        const fresh = useAppStore.getState().files.find((f) => f.id === file.id)
+        if (!fresh) continue
+        if (
+          (fresh.status === 'Renamed' ||
+            fresh.status === 'Approved' ||
+            fresh.status === 'Saved' ||
+            fresh.status === 'Generated' ||
+            fresh.status === 'Edited') &&
+          !onlyIds
+        ) {
+          continue
+        }
 
-        if (out.keyStatusChange) {
-          useAppStore.getState().updateApiKey(out.keyStatusChange.id, {
-            status: out.keyStatusChange.status,
-            lastError: out.keyStatusChange.lastError,
-            lastChecked: new Date().toISOString()
-          })
+        if (!firstFile && settings.delayBetweenFilesMs > 0) {
           useAppStore
             .getState()
             .addLog(
-              'warning',
-              'API',
-              `Key issue (${out.keyStatusChange.status}). Switched to next available key.`
+              'info',
+              'DELAY',
+              `Worker #${slotId} waiting ${settings.delayBetweenFilesMs}ms before next file`
             )
+          await sleep(settings.delayBetweenFilesMs)
+        }
+        firstFile = false
+        if (cancelRef.current || stoppedByThreshold) return
+
+        setWorker(slotId, {
+          fileId: fresh.id,
+          fileName: fresh.originalFilename,
+          apiKeySlot: null
+        })
+        useAppStore.getState().setBatch({ currentFileId: fresh.id })
+        useAppStore.getState().setFileStatus(fresh.id, 'Processing')
+        useAppStore
+          .getState()
+          .addLog('info', 'WORKER', `Worker #${slotId} started ${fresh.originalFilename}`, {
+            fileId: fresh.id
+          })
+
+        const maxAttempts = Math.max(1, (settings.maxRetryAttempts ?? 0) + 1)
+        let attempt = 0
+        let outcome: GenerateOutcome | null = null
+        while (attempt < maxAttempts) {
+          attempt++
+          // If the batch was cancelled mid-retry, fall through to the outcome
+          // handler below with a synthetic failure so the file is marked Failed
+          // rather than getting stuck in 'Processing' (which would exclude it
+          // from future Start runs and require manual Regenerate).
+          if (cancelRef.current || stoppedByThreshold) {
+            outcome = { ok: false, error: 'Batch stopped during retry' }
+            break
+          }
+          if (attempt > 1) {
+            useAppStore
+              .getState()
+              .addLog(
+                'info',
+                'RETRY',
+                `Retry attempt ${attempt - 1}/${maxAttempts - 1} for ${fresh.originalFilename} after ${settings.retryDelayMs}ms`,
+                { fileId: fresh.id }
+              )
+            await sleep(settings.retryDelayMs)
+            if (cancelRef.current || stoppedByThreshold) {
+              outcome = { ok: false, error: 'Batch stopped during retry' }
+              break
+            }
+          }
+          try {
+            outcome = await processFileOnce(fresh, useMock, settings)
+          } catch (err) {
+            const message = (err as Error)?.message ?? String(err)
+            outcome = { ok: false, error: `Unexpected error: ${message}` }
+            useAppStore
+              .getState()
+              .addLog(
+                'error',
+                'FAILED',
+                `Worker #${slotId} hit unexpected error on ${fresh.originalFilename}: ${message}`,
+                { fileId: fresh.id }
+              )
+          }
+          if (outcome.keyStatusChanges?.length) {
+            applyKeyStatusChanges(outcome.keyStatusChanges)
+          }
+          if (outcome.ok) break
+          if (outcome.rateLimitedAll) {
+            // No more keys to try; stop attempting this file in this loop
+            break
+          }
+          // Otherwise loop to retry (if attempts remain)
         }
 
-        if (out.ok && out.metadata) {
+        if (outcome?.ok && outcome.metadata) {
           useAppStore
             .getState()
-            .applyAiMetadata(fresh.id, out.metadata, out.apiProvider ?? '—', out.apiKeySlot ?? '—')
+            .applyAiMetadata(
+              fresh.id,
+              outcome.metadata,
+              outcome.apiProvider ?? '—',
+              outcome.apiKeySlot ?? '—'
+            )
           useAppStore
             .getState()
             .addLog('success', 'SUCCESS', `Metadata generated for ${fresh.originalFilename}`, {
               fileId: fresh.id,
-              apiKeySlot: out.apiKeySlot
+              apiKeySlot: outcome.apiKeySlot
             })
-          useAppStore
-            .getState()
-            .setBatch({ successCount: useAppStore.getState().batch.successCount + 1 })
+          useAppStore.getState().setBatch({
+            successCount: useAppStore.getState().batch.successCount + 1,
+            consecutiveFailures: 0
+          })
+          setWorker(slotId, {
+            fileId: null,
+            fileName: null,
+            apiKeySlot: outcome.apiKeySlot ?? null
+          })
         } else {
-          useAppStore.getState().setFileStatus(fresh.id, 'Failed', out.error)
-          useAppStore
-            .getState()
-            .addLog('error', 'FAILED', `${fresh.originalFilename} — ${out.error}`, {
-              fileId: fresh.id
-            })
-          useAppStore
-            .getState()
-            .setBatch({ failedCount: useAppStore.getState().batch.failedCount + 1 })
+          const err = outcome?.error ?? 'Unknown error'
+          useAppStore.getState().setFileStatus(fresh.id, 'Failed', err)
+          useAppStore.getState().addLog('error', 'FAILED', `${fresh.originalFilename} — ${err}`, {
+            fileId: fresh.id
+          })
+          const cur = useAppStore.getState().batch
+          useAppStore.getState().setBatch({
+            failedCount: cur.failedCount + 1,
+            consecutiveFailures: cur.consecutiveFailures + 1
+          })
+          setWorker(slotId, { fileId: null, fileName: null })
+
+          if (
+            settings.stopOnTooManyFailures &&
+            // Use || so a manually-edited project with failureThreshold===0 falls
+            // back to the default (5) instead of stopping on the first failure
+            // (consecutiveFailures >= 0 is always true once we reach this branch).
+            useAppStore.getState().batch.consecutiveFailures >= (settings.failureThreshold || 5)
+          ) {
+            stoppedByThreshold = true
+            useAppStore
+              .getState()
+              .addLog(
+                'warning',
+                'STOP',
+                `Stop on Too Many Failures triggered (${useAppStore.getState().batch.consecutiveFailures} consecutive failures)`
+              )
+            useAppStore.getState().setBatch({ isPaused: true })
+            useAppStore
+              .getState()
+              .showToast('error', 'Batch paused — too many consecutive failures')
+            return
+          }
         }
-      } catch (e) {
-        useAppStore.getState().setFileStatus(fresh.id, 'Failed', (e as Error).message)
-        useAppStore
-          .getState()
-          .addLog('error', 'FAILED', `${fresh.originalFilename} — ${(e as Error).message}`)
-        useAppStore
-          .getState()
-          .setBatch({ failedCount: useAppStore.getState().batch.failedCount + 1 })
       }
     }
 
-    useAppStore.getState().setBatch({ isRunning: false, isPaused: false, currentFileId: null })
+    // Defense-in-depth: even if a worker throws unexpectedly outside the
+    // retry-loop try/catch above, we don't want Promise.all to reject and
+    // skip the cleanup that resets isRunning. Each worker's rejection is
+    // logged and swallowed.
+    const workerPromises = Array.from({ length: workerCount }, (_, i) =>
+      worker(i + 1).catch((err: unknown) => {
+        const message = (err as Error)?.message ?? String(err)
+        useAppStore.getState().addLog('error', 'WORKER', `Worker #${i + 1} crashed: ${message}`)
+      })
+    )
+    await Promise.all(workerPromises)
+
+    if (cancelRef.current) {
+      useAppStore.getState().addLog('warning', 'STOP', `Batch stopped by user`)
+      useAppStore
+        .getState()
+        .setBatch({ isRunning: false, isPaused: true, currentFileId: null, workers: [] })
+      return STOP_SENTINEL
+    }
+
+    useAppStore.getState().setBatch({
+      isRunning: false,
+      isPaused: stoppedByThreshold,
+      currentFileId: null,
+      workers: []
+    })
     useAppStore
       .getState()
       .addLog(
@@ -145,6 +321,7 @@ export function useBatchControls() {
 
   const resumeBatch = useCallback(async () => {
     cancelRef.current = false
+    useAppStore.getState().addLog('info', 'RESUME', `Queue resumed`)
     return startBatch()
   }, [startBatch])
 
@@ -235,4 +412,30 @@ export function useAutoSave() {
     }, 1500)
     return () => clearTimeout(t)
   }, [enabled, watchedSnapshot])
+}
+
+/**
+ * Cooldown ticker — every second, recovers any API key whose cooldownUntil has elapsed.
+ * Mounted once at AppShell level.
+ */
+export function useCooldownTicker(): void {
+  useEffect(() => {
+    const id = setInterval(() => {
+      const state = useAppStore.getState()
+      const now = Date.now()
+      for (const k of state.apiKeys) {
+        if (k.cooldownUntil && new Date(k.cooldownUntil).getTime() <= now) {
+          const slot = `${k.provider} Key ${k.priority}`
+          state.updateApiKey(k.id, {
+            cooldownUntil: undefined,
+            status: k.status === 'Limit' ? 'Valid' : k.status
+          })
+          state.addLog('info', 'COOLDOWN', `Cooldown ended for ${slot}; key restored`, {
+            apiKeySlot: slot
+          })
+        }
+      }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
 }
