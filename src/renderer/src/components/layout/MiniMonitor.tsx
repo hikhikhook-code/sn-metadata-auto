@@ -45,8 +45,12 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
       }))
   const activeWorkers = workers.filter((w) => w.fileId !== null)
 
+  // Mirror the orchestrator's usability filter so the panel doesn't advertise
+  // a key (Invalid auth, Disabled by user) that the orchestrator will skip.
   const activeKey = [...apiKeys]
-    .filter((k) => k.enabled && k.apiKey)
+    .filter(
+      (k) => k.enabled && k.apiKey && k.status !== 'Disabled' && k.status !== 'Invalid'
+    )
     .filter((k) => !k.cooldownUntil || new Date(k.cooldownUntil).getTime() <= now)
     .sort((a, b) => a.priority - b.priority)[0]
   const activeKeyLabel = activeKey
