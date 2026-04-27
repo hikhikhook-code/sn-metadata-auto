@@ -169,7 +169,14 @@ export function useBatchControls() {
         let outcome: GenerateOutcome | null = null
         while (attempt < maxAttempts) {
           attempt++
-          if (cancelRef.current || stoppedByThreshold) return
+          // If the batch was cancelled mid-retry, fall through to the outcome
+          // handler below with a synthetic failure so the file is marked Failed
+          // rather than getting stuck in 'Processing' (which would exclude it
+          // from future Start runs and require manual Regenerate).
+          if (cancelRef.current || stoppedByThreshold) {
+            outcome = { ok: false, error: 'Batch stopped during retry' }
+            break
+          }
           if (attempt > 1) {
             useAppStore
               .getState()
@@ -180,7 +187,10 @@ export function useBatchControls() {
                 { fileId: fresh.id }
               )
             await sleep(settings.retryDelayMs)
-            if (cancelRef.current || stoppedByThreshold) return
+            if (cancelRef.current || stoppedByThreshold) {
+              outcome = { ok: false, error: 'Batch stopped during retry' }
+              break
+            }
           }
           try {
             outcome = await processFileOnce(fresh, useMock, settings)
