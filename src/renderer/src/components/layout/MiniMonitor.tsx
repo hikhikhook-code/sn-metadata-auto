@@ -57,7 +57,7 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
     ? `${activeKey.provider} Key ${activeKey.priority}`
     : apiKeys.length === 0
       ? 'Mock provider'
-      : '— (all keys cooling down)'
+      : '— (no usable key)'
 
   const cooldowns = apiKeys
     .map((k) => ({
