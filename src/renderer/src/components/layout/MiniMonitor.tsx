@@ -1,4 +1,5 @@
 import { ReactElement, ReactNode, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAppStore } from '@renderer/store/store'
 import { Activity, X, Users, Timer, CheckCircle2, AlertCircle } from 'lucide-react'
 
@@ -71,17 +72,18 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
         ? 'Empty'
         : 'Idle'
 
-  return (
+  // The TopBar has backdrop-filter, which creates a containing block for
+  // position:fixed descendants. Rendering the popover inline made the fixed
+  // element resolve to the topbar instead of the viewport and get clipped.
+  // Mount via a portal directly under document.body so the panel is anchored
+  // to the actual viewport.
+  const panel = (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Mini Monitor"
       className="glass-strong"
       style={{
-        // Use position: fixed so the popover is anchored to the viewport, not
-        // whatever positioned ancestor happens to be in the layout tree above
-        // <TopBar>. With absolute positioning the panel was clipped against
-        // its flex/grid parent and only the bottom edge peeked through.
         position: 'fixed',
         top: 'calc(var(--topbar-h) + 26px)',
         right: 30,
@@ -211,6 +213,8 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
       </div>
     </div>
   )
+
+  return createPortal(panel, document.body)
 }
 
 function Stat({
