@@ -78,11 +78,15 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
       aria-label="Mini Monitor"
       className="glass-strong"
       style={{
-        position: 'absolute',
-        top: 'calc(var(--topbar-h) + 14px)',
-        right: 18,
+        // Use position: fixed so the popover is anchored to the viewport, not
+        // whatever positioned ancestor happens to be in the layout tree above
+        // <TopBar>. With absolute positioning the panel was clipped against
+        // its flex/grid parent and only the bottom edge peeked through.
+        position: 'fixed',
+        top: 'calc(var(--topbar-h) + 26px)',
+        right: 30,
         width: 360,
-        zIndex: 50,
+        zIndex: 200,
         padding: 14,
         borderRadius: 14,
         boxShadow: '0 14px 40px rgba(120, 80, 180, 0.18)',
