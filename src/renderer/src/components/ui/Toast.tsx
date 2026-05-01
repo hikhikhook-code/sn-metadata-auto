@@ -8,7 +8,11 @@ export function Toast() {
 
   useEffect(() => {
     if (!toast) return
-    const t = setTimeout(dismiss, 4500)
+    // Info kind is used heavily by global click feedback; keep it short so
+    // back-to-back clicks don't visibly stack. Other kinds linger longer
+    // because they convey actual outcomes.
+    const ms = toast.kind === 'info' ? 1800 : 3500
+    const t = setTimeout(dismiss, ms)
     return () => clearTimeout(t)
   }, [toast, dismiss])
 
