@@ -155,7 +155,17 @@ export interface LogEntry {
 
 export type ViewMode = 'comfort' | 'compact'
 
+export type SettingsMode = 'simple' | 'advanced'
+
 export interface AppSettings {
+  /**
+   * UI density of the Settings page. `simple` (default) shows the small set
+   * of controls daily users care about; `advanced` reveals every setting.
+   * This is purely a UI knob — the underlying values for hidden settings are
+   * still read by the backend (workers, orchestrator, etc.) so behavior never
+   * changes between modes.
+   */
+  settingsMode: SettingsMode
   defaultKeywordCount: number
   platformPreset: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
   autoRenameAfterApprove: boolean
