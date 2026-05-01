@@ -17,6 +17,12 @@ asarUnpack:
   - node_modules/exiftool-vendored/**
   - node_modules/exiftool-vendored.exe/**
   - node_modules/exiftool-vendored.pl/**
+  # @resvg/resvg-js ships per-platform native NAPI bindings via separate
+  # subpackages (e.g. @resvg/resvg-js-win32-x64-msvc). The loader at the
+  # main package's entry point dlopen()s the platform-specific .node binary
+  # at runtime, so both the wrapper and the binary packages must live on
+  # disk outside app.asar.
+  - node_modules/@resvg/**
 win:
   executableName: sn-metadata-auto
 nsis:

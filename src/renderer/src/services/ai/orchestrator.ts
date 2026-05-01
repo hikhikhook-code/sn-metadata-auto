@@ -33,16 +33,20 @@ export interface GenerateOutcome {
 }
 
 /**
- * File extensions that are known to be unusable by every AI vision provider
- * we wire up (Gemini / OpenAI / Groq / OpenAI-compatible custom endpoints).
- * Vector formats fall into this bucket because the file bytes are XML or
- * PostScript source — even though SVG has an `image/svg+xml` MIME type,
- * vision models reject it. Everything else (raster images and video) is
- * allowed through; if a particular provider rejects it that surfaces as a
- * normal `Failed` outcome with the provider's error message, which is
- * appropriate because other providers in the rotation may still accept it.
+ * File extensions whose raw bytes cannot be sent directly to any vision
+ * provider we wire up. EPS stays here because we currently have no rasterizer
+ * for PostScript; SVG is *not* in this set anymore — for SVG we rasterize to
+ * a PNG preview via the main process and feed that to the provider instead
+ * (see the SVG branch below).
  */
-const UNSUPPORTED_AI_GENERATE_EXTS: ReadonlySet<string> = new Set(['svg', 'eps'])
+const UNSUPPORTED_AI_GENERATE_EXTS: ReadonlySet<string> = new Set(['eps'])
+
+/**
+ * Vector formats that need a rasterized preview before they reach the AI.
+ * For each of these we ask the main process to produce a PNG snapshot, then
+ * forward the snapshot path (with `fileType=png`) to the provider.
+ */
+const VECTOR_RASTERIZE_EXTS: ReadonlySet<string> = new Set(['svg'])
 
 interface OrchestrateOptions {
   useMock: boolean
@@ -103,6 +107,27 @@ export async function generateForFile(
     }
   }
 
+  // For vector formats with a known rasterizer (currently SVG), substitute
+  // a PNG preview rendered by the main process before talking to any
+  // provider. The original SVG file is left untouched on disk; the AI sees
+  // the PNG snapshot and the resulting metadata is applied to the SVG.
+  let aiFilePath = file.originalPath
+  let aiFileType = String(file.fileType)
+  if (VECTOR_RASTERIZE_EXTS.has(ext)) {
+    const preview = await window.api.media.renderSvgPreview({
+      filePath: file.originalPath,
+      width: 1024
+    })
+    if (!preview.ok || !preview.previewPath) {
+      return {
+        ok: false,
+        error: `SVG preview rendering failed. Metadata generation could not continue.${preview.error ? ` (${preview.error})` : ''}`
+      }
+    }
+    aiFilePath = preview.previewPath
+    aiFileType = 'png'
+  }
+
   const now = Date.now()
   const usable = [...apiKeys]
     .filter((k) => k.enabled && k.apiKey && k.status !== 'Disabled' && k.status !== 'Invalid')
@@ -133,8 +158,8 @@ export async function generateForFile(
         apiKey: key.apiKey,
         baseUrl: key.baseUrl,
         model: key.model,
-        filePath: file.originalPath,
-        fileType: String(file.fileType),
+        filePath: aiFilePath,
+        fileType: aiFileType,
         keywordCount: opts.keywordCount
       })
       if (res.ok && res.metadata) {
