@@ -123,6 +123,10 @@ const api = {
         error?: string
       }>
     }> => ipcRenderer.invoke('metadata:embed', req)
+  },
+  crypto: {
+    encryptionStatus: (): Promise<{ available: boolean; backend: string }> =>
+      ipcRenderer.invoke('crypto:encryption-status')
   }
 }
 

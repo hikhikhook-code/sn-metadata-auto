@@ -12,6 +12,7 @@ import {
   registerVectorPreviewIpc,
   cleanupVectorPreviewCache
 } from './ipc/media/renderVectorPreview'
+import { registerCryptoIpc } from './ipc/crypto'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -110,6 +111,7 @@ app.whenReady().then(() => {
   registerVectorPreviewIpc()
   // Fire-and-forget: don't block window creation on cache pruning.
   void cleanupVectorPreviewCache()
+  registerCryptoIpc()
 
   createWindow()
 
