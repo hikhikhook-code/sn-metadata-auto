@@ -27,6 +27,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@resvg/resvg-js": "^2.6.2",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
     "exiftool-vendored": "^35.19.0",

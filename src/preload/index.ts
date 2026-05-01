@@ -92,6 +92,13 @@ const api = {
       status?: string
     }> => ipcRenderer.invoke('ai:generate', input)
   },
+  media: {
+    renderSvgPreview: (input: {
+      filePath: string
+      width?: number
+    }): Promise<{ ok: boolean; previewPath?: string; mimeType?: 'image/png'; error?: string }> =>
+      ipcRenderer.invoke('media:render-svg-preview', input)
+  },
   metadata: {
     embed: (req: {
       files: Array<{

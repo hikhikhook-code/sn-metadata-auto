@@ -8,6 +8,10 @@ import { registerProjectIpc } from './ipc/project'
 import { registerExportIpc } from './ipc/export'
 import { registerAiIpc } from './ipc/ai'
 import { registerEmbedIpc, shutdownExifTool } from './ipc/embed'
+import {
+  registerVectorPreviewIpc,
+  cleanupVectorPreviewCache
+} from './ipc/media/renderVectorPreview'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -103,6 +107,9 @@ app.whenReady().then(() => {
   registerExportIpc()
   registerAiIpc()
   registerEmbedIpc()
+  registerVectorPreviewIpc()
+  // Fire-and-forget: don't block window creation on cache pruning.
+  void cleanupVectorPreviewCache()
 
   createWindow()
 
