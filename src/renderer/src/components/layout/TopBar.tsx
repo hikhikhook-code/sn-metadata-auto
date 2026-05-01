@@ -179,7 +179,7 @@ export function TopBar() {
             className="btn btn-sm"
             onClick={stopBatch}
             disabled={!batch.isRunning}
-            style={{ background: 'rgba(255,255,255,0.6)' }}
+            style={{ background: 'var(--c-glass-2)' }}
           >
             <Square size={14} /> Stop
           </button>
@@ -189,7 +189,7 @@ export function TopBar() {
             className="btn btn-sm"
             onClick={resumeBatch}
             disabled={batch.isRunning || !hasReadyFile}
-            style={{ background: 'rgba(255,255,255,0.6)' }}
+            style={{ background: 'var(--c-glass-2)' }}
           >
             <Pause size={14} style={{ transform: 'rotate(90deg)' }} /> Resume
           </button>
@@ -279,7 +279,7 @@ function WindowControls({ maximized }: WindowControlsProps): ReactElement {
     justifyContent: 'center',
     borderRadius: 8,
     border: '1px solid var(--c-border)',
-    background: 'rgba(255,255,255,0.55)',
+    background: 'var(--c-glass-2)',
     color: 'var(--c-text)',
     cursor: 'pointer',
     padding: 0

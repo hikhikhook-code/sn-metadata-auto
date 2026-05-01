@@ -91,7 +91,7 @@ export function MetadataEditorPage() {
                   }}
                   onMouseEnter={(e) => {
                     if (!sel)
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.55)'
+                      (e.currentTarget as HTMLElement).style.background = 'var(--c-glass-2)'
                   }}
                   onMouseLeave={(e) => {
                     if (!sel) (e.currentTarget as HTMLElement).style.background = 'transparent'

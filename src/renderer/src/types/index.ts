@@ -164,6 +164,12 @@ export type ViewMode = 'comfort' | 'compact'
 
 export type SettingsMode = 'simple' | 'advanced'
 
+/**
+ * App-wide color theme. `'system'` follows the host OS preference via
+ * `prefers-color-scheme` and updates live when the OS scheme changes.
+ */
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 export interface AppSettings {
   /**
    * UI density of the Settings page. `simple` (default) shows the small set
@@ -173,6 +179,12 @@ export interface AppSettings {
    * changes between modes.
    */
   settingsMode: SettingsMode
+  /**
+   * UI color theme. `'system'` is the default and tracks the host OS.
+   * Changing this writes a `data-theme` attribute on `<html>`; CSS variables
+   * in `theme.css` resolve from there.
+   */
+  theme: ThemePreference
   defaultKeywordCount: number
   platformPreset: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
   /**

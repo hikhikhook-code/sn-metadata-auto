@@ -69,7 +69,7 @@ export function ActionMenu({ items, label }: { items: MenuItem[]; label?: string
               }}
               onMouseEnter={(e) => {
                 if (!it.disabled)
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.6)'
+                  (e.currentTarget as HTMLElement).style.background = 'var(--c-glass-2)'
               }}
               onMouseLeave={(e) => {
                 ;(e.currentTarget as HTMLElement).style.background = 'transparent'

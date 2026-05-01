@@ -141,7 +141,7 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
         justifyContent: 'center',
         position: 'relative',
         flexShrink: 0,
-        background: 'rgba(255,255,255,0.55)'
+        background: 'var(--c-glass-2)'
       }}
     >
       {showImage ? (

@@ -206,7 +206,7 @@ export function MiniMonitor({
                 gap: 6,
                 padding: '4px 8px',
                 borderRadius: 8,
-                background: w.fileId ? 'rgba(216, 191, 247, 0.25)' : 'rgba(255,255,255,0.4)',
+                background: w.fileId ? 'rgba(216, 191, 247, 0.25)' : 'var(--c-glass-1)',
                 border: '1px solid var(--c-border)'
               }}
             >
@@ -249,7 +249,7 @@ function Stat({
       style={{
         padding: '6px 10px',
         borderRadius: 10,
-        background: 'rgba(255,255,255,0.55)',
+        background: 'var(--c-glass-2)',
         border: '1px solid var(--c-border)'
       }}
     >

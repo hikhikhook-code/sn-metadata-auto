@@ -1,14 +1,39 @@
-/* SN Metadata Auto — Liquid Glass Theme */
-:root {
+/* SN Metadata Auto — Liquid Glass Theme
+ *
+ * Two themes share the same CSS-variable contract. Components only ever read
+ * `var(--c-*)`, so switching themes is a matter of setting `data-theme` on
+ * `<html>`. The light theme is the original "Liquid Glass" peach/cream/rose;
+ * the dark theme is "Velvet Glass" — same accent family, deep aubergine bg.
+ */
+
+:root,
+:root[data-theme='light'] {
   --c-bg-1: #fff7f0;
   --c-bg-2: #fde7e0;
   --c-bg-3: #f3e2ff;
   --c-bg-4: #ffeede;
 
-  --c-surface: rgba(255, 255, 255, 0.55);
+  /* Background overlay (the radial light spots).
+   * Each entry is a single radial-gradient layer; combined in body::before. */
+  --bg-overlay-1: rgba(255, 200, 220, 0.45);
+  --bg-overlay-2: rgba(220, 195, 245, 0.45);
+  --bg-overlay-3: rgba(255, 215, 188, 0.4);
+  --bg-overlay-4: rgba(255, 230, 200, 0.4);
+
+  /* Frosted-glass surface tiers — same rgba(white, x) you'd hand-write,
+   * but extracted so dark mode can swap the tint without each component
+   * having to know the theme. */
+  --c-glass-1: rgba(255, 255, 255, 0.35);
+  --c-glass-2: rgba(255, 255, 255, 0.55);
+  --c-glass-3: rgba(255, 255, 255, 0.7);
+  --c-glass-4: rgba(255, 255, 255, 0.85);
+  --c-glass-hover: rgba(255, 255, 255, 0.5);
+
+  --c-surface: var(--c-glass-2);
   --c-surface-strong: rgba(255, 255, 255, 0.75);
-  --c-surface-soft: rgba(255, 255, 255, 0.35);
+  --c-surface-soft: var(--c-glass-1);
   --c-surface-hover: rgba(255, 255, 255, 0.78);
+
   --c-border: rgba(255, 255, 255, 0.6);
   --c-border-strong: rgba(190, 140, 170, 0.25);
 
@@ -31,6 +56,33 @@
   --c-info: #9b86bd;
   --c-info-soft: #e6dcf2;
 
+  /* Banner / counter text colors (deeper than the badge bg). */
+  --c-text-warning-strong: #8a5a1a;
+  --c-text-danger-strong: #8a3838;
+  --c-text-info-strong: #5a4884;
+
+  /* Inputs & alerts. */
+  --c-input-bg: rgba(255, 255, 255, 0.6);
+  --c-input-bg-focus: rgba(255, 255, 255, 0.85);
+  --c-input-warn-bg: rgba(255, 240, 218, 0.55);
+  --c-input-error-bg: rgba(255, 232, 232, 0.55);
+
+  /* Dropdown chevron baked into the .select background. Themed so it's
+   * still visible against a dark surface. */
+  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%239c8a9d' d='M4 6l4 4 4-4z'/></svg>");
+
+  /* Scrollbar thumb. */
+  --c-scrollbar-thumb: rgba(180, 130, 160, 0.25);
+  --c-scrollbar-thumb-hover: rgba(180, 130, 160, 0.45);
+
+  /* Sidebar active-item pill — same accent family as primary buttons. */
+  --c-nav-active-bg: linear-gradient(
+    135deg,
+    rgba(255, 210, 225, 0.85),
+    rgba(225, 210, 245, 0.85)
+  );
+  --c-nav-active-border: rgba(201, 122, 139, 0.25);
+
   --r-sm: 10px;
   --r-md: 14px;
   --r-lg: 20px;
@@ -48,6 +100,159 @@
   --bottombar-h: 38px;
   --sidebar-w: 232px;
   --sidebar-w-collapsed: 64px;
+}
+
+:root[data-theme='dark'] {
+  /* Deep plum gradient — matches the rose/purple accent family. */
+  --c-bg-1: #1a1020;
+  --c-bg-2: #2a1a30;
+  --c-bg-3: #221538;
+  --c-bg-4: #25182c;
+
+  /* Same radial-spot positions, much subtler so they read as glow not wash. */
+  --bg-overlay-1: rgba(220, 130, 170, 0.18);
+  --bg-overlay-2: rgba(170, 130, 220, 0.18);
+  --bg-overlay-3: rgba(220, 150, 130, 0.14);
+  --bg-overlay-4: rgba(180, 140, 110, 0.12);
+
+  /* Glass tint shifts from white to a warm plum so frosted surfaces
+   * actually look like frosted plum, not gray fog. */
+  --c-glass-1: rgba(110, 75, 110, 0.18);
+  --c-glass-2: rgba(110, 75, 110, 0.32);
+  --c-glass-3: rgba(110, 75, 110, 0.46);
+  --c-glass-4: rgba(110, 75, 110, 0.6);
+  --c-glass-hover: rgba(255, 220, 240, 0.08);
+
+  --c-surface: var(--c-glass-2);
+  --c-surface-strong: var(--c-glass-3);
+  --c-surface-soft: var(--c-glass-1);
+  --c-surface-hover: var(--c-glass-3);
+
+  --c-border: rgba(220, 180, 220, 0.14);
+  --c-border-strong: rgba(220, 180, 220, 0.24);
+
+  --c-text: #f3e3e8;
+  --c-text-soft: #c5acbf;
+  --c-text-muted: #8e7689;
+
+  /* Accents are nudged brighter to keep contrast on the dark bg. The rose
+   * gold and soft purple identity is preserved. */
+  --c-accent: #e094a4;
+  --c-accent-soft: rgba(224, 148, 164, 0.22);
+  --c-accent-strong: #f1abba;
+  --c-accent-2: #cba8e0;
+  --c-accent-3: #f0b89f;
+
+  --c-success: #8cc78a;
+  --c-success-soft: rgba(140, 199, 138, 0.18);
+  --c-warning: #e3b574;
+  --c-warning-soft: rgba(227, 181, 116, 0.18);
+  --c-danger: #e88787;
+  --c-danger-soft: rgba(232, 135, 135, 0.18);
+  --c-info: #b9a4d4;
+  --c-info-soft: rgba(185, 164, 212, 0.18);
+
+  --c-text-warning-strong: #f0c281;
+  --c-text-danger-strong: #f5a7a7;
+  --c-text-info-strong: #d2bdee;
+
+  --c-input-bg: rgba(255, 255, 255, 0.04);
+  --c-input-bg-focus: rgba(255, 255, 255, 0.08);
+  --c-input-warn-bg: rgba(227, 181, 116, 0.1);
+  --c-input-error-bg: rgba(232, 135, 135, 0.12);
+
+  --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%23c5acbf' d='M4 6l4 4 4-4z'/></svg>");
+
+  --c-scrollbar-thumb: rgba(220, 180, 220, 0.2);
+  --c-scrollbar-thumb-hover: rgba(220, 180, 220, 0.4);
+
+  --c-nav-active-bg: linear-gradient(
+    135deg,
+    rgba(232, 148, 164, 0.22),
+    rgba(203, 168, 224, 0.22)
+  );
+  --c-nav-active-border: rgba(232, 148, 164, 0.4);
+
+  /* Heavier shadows read better on a dark surface. */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 22px 55px rgba(0, 0, 0, 0.6), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Respect "Match system" by mirroring dark tokens whenever the OS reports
+ * dark and we haven't been forced to light. The renderer hook still sets an
+ * explicit data-theme attribute when the user picks Light/Dark manually, so
+ * this only fires for theme = 'system'. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --c-bg-1: #1a1020;
+    --c-bg-2: #2a1a30;
+    --c-bg-3: #221538;
+    --c-bg-4: #25182c;
+
+    --bg-overlay-1: rgba(220, 130, 170, 0.18);
+    --bg-overlay-2: rgba(170, 130, 220, 0.18);
+    --bg-overlay-3: rgba(220, 150, 130, 0.14);
+    --bg-overlay-4: rgba(180, 140, 110, 0.12);
+
+    --c-glass-1: rgba(110, 75, 110, 0.18);
+    --c-glass-2: rgba(110, 75, 110, 0.32);
+    --c-glass-3: rgba(110, 75, 110, 0.46);
+    --c-glass-4: rgba(110, 75, 110, 0.6);
+    --c-glass-hover: rgba(255, 220, 240, 0.08);
+
+    --c-surface: var(--c-glass-2);
+    --c-surface-strong: var(--c-glass-3);
+    --c-surface-soft: var(--c-glass-1);
+    --c-surface-hover: var(--c-glass-3);
+
+    --c-border: rgba(220, 180, 220, 0.14);
+    --c-border-strong: rgba(220, 180, 220, 0.24);
+
+    --c-text: #f3e3e8;
+    --c-text-soft: #c5acbf;
+    --c-text-muted: #8e7689;
+
+    --c-accent: #e094a4;
+    --c-accent-soft: rgba(224, 148, 164, 0.22);
+    --c-accent-strong: #f1abba;
+    --c-accent-2: #cba8e0;
+    --c-accent-3: #f0b89f;
+
+    --c-success: #8cc78a;
+    --c-success-soft: rgba(140, 199, 138, 0.18);
+    --c-warning: #e3b574;
+    --c-warning-soft: rgba(227, 181, 116, 0.18);
+    --c-danger: #e88787;
+    --c-danger-soft: rgba(232, 135, 135, 0.18);
+    --c-info: #b9a4d4;
+    --c-info-soft: rgba(185, 164, 212, 0.18);
+
+    --c-text-warning-strong: #f0c281;
+    --c-text-danger-strong: #f5a7a7;
+    --c-text-info-strong: #d2bdee;
+
+    --c-input-bg: rgba(255, 255, 255, 0.04);
+    --c-input-bg-focus: rgba(255, 255, 255, 0.08);
+    --c-input-warn-bg: rgba(227, 181, 116, 0.1);
+    --c-input-error-bg: rgba(232, 135, 135, 0.12);
+
+    --select-chevron: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%23c5acbf' d='M4 6l4 4 4-4z'/></svg>");
+
+    --c-scrollbar-thumb: rgba(220, 180, 220, 0.2);
+    --c-scrollbar-thumb-hover: rgba(220, 180, 220, 0.4);
+
+    --c-nav-active-bg: linear-gradient(
+      135deg,
+      rgba(232, 148, 164, 0.22),
+      rgba(203, 168, 224, 0.22)
+    );
+    --c-nav-active-border: rgba(232, 148, 164, 0.4);
+
+    --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 22px 55px rgba(0, 0, 0, 0.6), 0 6px 16px rgba(0, 0, 0, 0.4);
+  }
 }
 
 * {
@@ -78,6 +283,11 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* A short transition makes the theme switch feel like a soft fade rather
+   * than a jarring snap. Backgrounds, text, and borders are themable. */
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
 body::before {
@@ -86,10 +296,10 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 18%, rgba(255, 200, 220, 0.45), transparent 38%),
-    radial-gradient(circle at 88% 12%, rgba(220, 195, 245, 0.45), transparent 42%),
-    radial-gradient(circle at 78% 92%, rgba(255, 215, 188, 0.4), transparent 40%),
-    radial-gradient(circle at 22% 88%, rgba(255, 230, 200, 0.4), transparent 38%);
+    radial-gradient(circle at 12% 18%, var(--bg-overlay-1), transparent 38%),
+    radial-gradient(circle at 88% 12%, var(--bg-overlay-2), transparent 42%),
+    radial-gradient(circle at 78% 92%, var(--bg-overlay-3), transparent 40%),
+    radial-gradient(circle at 22% 88%, var(--bg-overlay-4), transparent 38%);
   z-index: 0;
 }
 
@@ -128,14 +338,14 @@ a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(180, 130, 160, 0.25);
+  background: var(--c-scrollbar-thumb);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(180, 130, 160, 0.45);
+  background: var(--c-scrollbar-thumb-hover);
   background-clip: padding-box;
   border: 2px solid transparent;
 }

@@ -70,7 +70,7 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
           ? 'rgba(246, 213, 211, 0.85)'
           : index < 10
             ? 'rgba(255, 230, 215, 0.85)'
-            : 'rgba(255, 255, 255, 0.7)',
+            : 'var(--c-glass-3)',
         border: '1px solid var(--c-border-strong)',
         fontSize: 12,
         fontWeight: 500,
@@ -95,7 +95,7 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
           width: 18,
           height: 18,
           borderRadius: 999,
-          background: 'rgba(255,255,255,0.6)',
+          background: 'var(--c-glass-2)',
           color: 'var(--c-text-muted)',
           fontSize: 10,
           fontWeight: 700,
@@ -254,7 +254,7 @@ export function KeywordChipList({ keywords, target = 49, onChange, readOnly, com
               padding: compact ? 4 : 6,
               minHeight: compact ? 36 : 48,
               borderRadius: 12,
-              background: 'rgba(255,255,255,0.35)',
+              background: 'var(--c-glass-1)',
               border: '1px dashed var(--c-border-strong)'
             }}
           >
