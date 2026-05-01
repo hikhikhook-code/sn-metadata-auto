@@ -24,6 +24,7 @@ const MAX_API_KEYS = 10
 const PROJECT_VERSION = 1
 
 const DEFAULT_SETTINGS: AppSettings = {
+  settingsMode: 'simple',
   defaultKeywordCount: 49,
   platformPreset: 'Adobe Stock',
   autoRenameAfterApprove: true,
