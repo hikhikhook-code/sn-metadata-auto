@@ -125,12 +125,12 @@ export function TopBar() {
         </button>
       </Tooltip>
 
-      <Tooltip content="Quick export — opens Export page with the current metadata ready to save.">
+      <Tooltip content="Open the Save Output Files page. This button only navigates — it does not create output files on its own.">
         <button
           className="btn btn-sm"
           onClick={() => {
             if (files.length === 0) {
-              showToast('warning', 'No files in the queue to export')
+              showToast('warning', 'No files in the queue')
               return
             }
             setActivePage('export')
@@ -141,7 +141,7 @@ export function TopBar() {
             borderColor: 'transparent'
           }}
         >
-          <FileDown size={14} /> Quick Export
+          <FileDown size={14} /> Go to Output
         </button>
       </Tooltip>
 

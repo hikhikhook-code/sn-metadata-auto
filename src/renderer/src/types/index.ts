@@ -107,7 +107,13 @@ export interface ModelPreset {
 export interface ApiKeyEntry {
   id: string
   name: string
-  provider: ApiProvider
+  /**
+   * Empty string means the user has clicked Add API Key but hasn't yet
+   * picked a provider. We deliberately do not auto-fill Gemini / OpenAI /
+   * etc on Add so the user has to make an explicit choice before any
+   * provider-specific defaults (model preset, base URL slot) appear.
+   */
+  provider: ApiProvider | ''
   model: string
   apiKey: string
   baseUrl?: string

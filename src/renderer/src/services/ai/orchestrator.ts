@@ -130,7 +130,10 @@ export async function generateForFile(
 
   const now = Date.now()
   const usable = [...apiKeys]
-    .filter((k) => k.enabled && k.apiKey && k.status !== 'Disabled' && k.status !== 'Invalid')
+    .filter(
+      (k) =>
+        k.enabled && k.apiKey && k.provider && k.status !== 'Disabled' && k.status !== 'Invalid'
+    )
     .filter((k) => {
       if (!k.cooldownUntil) return true
       return new Date(k.cooldownUntil).getTime() <= now
