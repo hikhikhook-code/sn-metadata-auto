@@ -1,0 +1,65 @@
+name: Build Windows
+
+# Builds the Windows installer (NSIS .exe) on every push to a branch and on
+# every pull request, then uploads it as a workflow artifact so reviewers can
+# download a runnable build directly from the PR's "Checks" tab without having
+# to clone and build locally.
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch: {}
+
+# Avoid wasting CI minutes on superseded commits / PR pushes.
+concurrency:
+  group: build-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        # `npm run build:win` runs `electron-vite build` then
+        # `electron-builder --win`, which produces an unpacked dir plus an
+        # NSIS installer in `dist/` (named via electron-builder.yml, e.g.
+        # `sn-metadata-auto-<version>-setup.exe`).
+        run: npm run build:win
+        env:
+          # Disable electron-builder's auto-publish; we only want the artifact.
+          GH_TOKEN: ''
+          # Skip code signing — no signing certs configured. Unsigned installers
+          # work fine for internal testing; SmartScreen will warn on first run.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installer artifact
+        # The artifact appears in the PR "Checks" tab (and on the workflow run
+        # page). It is retained for 14 days by default at the repo level.
+        uses: actions/upload-artifact@v4
+        with:
+          name: sn-metadata-auto-windows-${{ github.sha }}
+          path: |
+            dist/*-setup.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: 14
