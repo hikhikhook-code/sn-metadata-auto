@@ -171,6 +171,13 @@ export interface AppSettings {
   platformPreset: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
   autoRenameAfterApprove: boolean
   autoRenameAfterSuccess: boolean
+  /**
+   * When true, Approve also writes the AI-generated metadata into the source
+   * file (XMP/IPTC/EXIF) before any rename happens. Default true so daily
+   * users get a complete, ready-to-upload file from a single Approve click
+   * without needing to remember to visit the Export → Embed flow.
+   */
+  autoEmbedAfterApprove: boolean
   keepOriginalBackup: boolean
   useTitleCase: boolean
   useLowercaseFilename: boolean

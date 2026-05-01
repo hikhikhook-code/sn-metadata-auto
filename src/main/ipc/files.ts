@@ -161,17 +161,29 @@ export function registerFileIpc(): void {
         toFilename: string
         backup: boolean
         addNumberIfDuplicate: boolean
+        outputDir?: string
       }
     ) => {
       try {
-        const dir = path.dirname(req.fromPath)
+        // Decide the final directory the file should live in. The renderer
+        // passes settings.outputFolder here as `outputDir`; when it's blank
+        // (the default for new projects) we fall back to renaming in-place
+        // alongside the source file. This is what makes the Settings UI's
+        // "Output folder" knob actually move files for the first time —
+        // previously the IPC always used `dirname(fromPath)`.
+        const sourceDir = path.dirname(req.fromPath)
+        const outDir =
+          req.outputDir && req.outputDir.length > 0 ? req.outputDir : sourceDir
+        if (outDir !== sourceDir) {
+          await fs.mkdir(outDir, { recursive: true })
+        }
+
         const ext = path.extname(req.toFilename) || path.extname(req.fromPath)
         const stem = req.toFilename
           .replace(/[\\/:*?"<>|]/g, '')
           .replace(/\s+/g, ' ')
           .trim()
-        let target = path.join(dir, stem.endsWith(ext) ? stem : stem)
-        if (!stem.endsWith(ext)) target = path.join(dir, stem + ext)
+        let target = path.join(outDir, stem.endsWith(ext) ? stem : stem + ext)
 
         if (req.addNumberIfDuplicate) {
           let i = 2
@@ -180,7 +192,7 @@ export function registerFileIpc(): void {
             try {
               await fs.access(current)
               const baseStem = path.basename(target, ext)
-              current = path.join(dir, `${baseStem} ${i}${ext}`)
+              current = path.join(outDir, `${baseStem} ${i}${ext}`)
               i++
             } catch {
               target = current
@@ -190,21 +202,43 @@ export function registerFileIpc(): void {
         }
 
         if (req.backup) {
+          // Two backup strategies depending on whether we're moving the file
+          // out of its source directory:
+          //   - Same-dir rename: snapshot to `<sourceDir>/_originals/` so the
+          //     user has the pre-rename copy if they undo.
+          //   - Cross-dir move: snapshot to `<sourceDir>/_originals/` too —
+          //     the copy at the destination already carries the new name and
+          //     embedded metadata, so we still want the untouched original
+          //     preserved at its source location for safety.
           try {
-            const backupDir = path.join(dir, '_originals')
+            const backupDir = path.join(sourceDir, '_originals')
             await fs.mkdir(backupDir, { recursive: true })
             const backupPath = path.join(backupDir, path.basename(req.fromPath))
             try {
               await fs.copyFile(req.fromPath, backupPath)
             } catch {
-              // ignore backup failure
+              // ignore backup failure — we still attempt the rename below.
             }
           } catch {
             // ignore
           }
         }
 
-        await fs.rename(req.fromPath, target)
+        // `fs.rename` is atomic on the same filesystem volume but throws
+        // EXDEV when source and destination are on different drives (common
+        // on Windows when the user picks an Output Folder on D: while files
+        // came from C:). Fall back to copy-then-unlink in that case.
+        try {
+          await fs.rename(req.fromPath, target)
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code
+          if (code === 'EXDEV') {
+            await fs.copyFile(req.fromPath, target)
+            await fs.unlink(req.fromPath)
+          } else {
+            throw err
+          }
+        }
         return { ok: true, newPath: target, newFilename: path.basename(target) }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
