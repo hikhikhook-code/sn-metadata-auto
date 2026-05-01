@@ -17,21 +17,32 @@ export interface GenerateOutcome {
   keyStatusChanges?: KeyStatusChange[]
   rateLimitedAll?: boolean
   /**
-   * Set when the file format is not supported by any AI vision provider
-   * (e.g. SVG, EPS, MOV, MP4 — Gemini/OpenAI/Groq only accept JPG/PNG/WEBP).
-   * The caller should mark the file as `Unsupported` rather than `Failed` and
-   * not retry, so the user can fill metadata in manually via the Editor.
+   * Set when the file format genuinely cannot be sent to any AI provider
+   * (currently: SVG and EPS — vector formats whose raw bytes are XML/PostScript
+   * source, which vision models can't interpret as an image). Raster images
+   * (JPG/PNG/WEBP) and video (MP4/MOV/AVI/WEBM) are NOT marked unsupported
+   * because:
+   *  - Gemini accepts video bytes directly (file uploads);
+   *  - OpenAI / Groq vision endpoints get the file's first-frame data URL via
+   *    `readBase64` in `src/main/ipc/ai.ts`, which works for video containers
+   *    even when the API's documented allow-list is image-only.
+   * The caller marks the file as `Unsupported` rather than `Failed` and skips
+   * retries, letting the user enter metadata manually via the Editor.
    */
   unsupported?: boolean
 }
 
 /**
- * Image MIME types that mainstream AI vision providers (Gemini, OpenAI, Groq,
- * and most OpenAI-compatible endpoints) accept for inline image input. Any
- * other extension is short-circuited as `unsupported` instead of triggering
- * a guaranteed-fail network round-trip.
+ * File extensions that are known to be unusable by every AI vision provider
+ * we wire up (Gemini / OpenAI / Groq / OpenAI-compatible custom endpoints).
+ * Vector formats fall into this bucket because the file bytes are XML or
+ * PostScript source — even though SVG has an `image/svg+xml` MIME type,
+ * vision models reject it. Everything else (raster images and video) is
+ * allowed through; if a particular provider rejects it that surfaces as a
+ * normal `Failed` outcome with the provider's error message, which is
+ * appropriate because other providers in the rotation may still accept it.
  */
-const AI_VISION_EXTS: ReadonlySet<string> = new Set(['jpg', 'jpeg', 'png', 'webp'])
+const UNSUPPORTED_AI_GENERATE_EXTS: ReadonlySet<string> = new Set(['svg', 'eps'])
 
 interface OrchestrateOptions {
   useMock: boolean
@@ -84,11 +95,11 @@ export async function generateForFile(
   }
 
   const ext = String(file.fileType).toLowerCase()
-  if (!AI_VISION_EXTS.has(ext)) {
+  if (UNSUPPORTED_AI_GENERATE_EXTS.has(ext)) {
     return {
       ok: false,
       unsupported: true,
-      error: `${ext.toUpperCase()} files are not supported by AI vision providers (image-only: JPG, PNG, WEBP). Edit metadata manually in the Editor, then use Embed metadata to write it into the file.`
+      error: `${ext.toUpperCase()} files cannot be analyzed by AI vision providers because their bytes are vector source (XML / PostScript), not raster image data. Edit metadata manually in the Editor, then use Embed metadata to write it into the file.`
     }
   }
 
