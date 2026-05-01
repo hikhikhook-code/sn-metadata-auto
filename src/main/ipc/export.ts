@@ -91,7 +91,23 @@ export function registerExportIpc(): void {
       let buf: Buffer
       if (ext === 'csv') {
         const delim = payload.delimiter ?? ','
-        buf = Buffer.from(rowsToCsv(payload.rows, delim, payload.headers), 'utf-8')
+        // Microsoft Excel parses a CSV's column delimiter from the user's
+        // regional setting (e.g. Indonesian Excel defaults to `;`, English
+        // to `,`). When the file's delimiter doesn't match the locale, every
+        // row collapses into column A. The standard escape hatch is the
+        // `sep=<char>` directive on line 1: Excel reads it as a hint and
+        // applies that delimiter regardless of locale. Other CSV consumers
+        // (Adobe Stock contributor portal, Shutterstock submitter,
+        // pandas/Python, LibreOffice) treat it as a regular row that they
+        // either skip silently because no header matches, or in LibreOffice
+        // simply expose as a one-cell first row.
+        //
+        // We also prepend a UTF-8 BOM so Excel renders non-ASCII characters
+        // (Indonesian diacritics in titles/keywords) correctly. The BOM is
+        // tolerated by every parser we care about.
+        const sepLine = `sep=${delim}\r\n`
+        const csvText = sepLine + rowsToCsv(payload.rows, delim, payload.headers)
+        buf = Buffer.concat([Buffer.from('\uFEFF', 'utf-8'), Buffer.from(csvText, 'utf-8')])
       } else if (ext === 'txt') {
         buf = Buffer.from(rowsToTxt(payload.rows), 'utf-8')
       } else if (ext === 'json') {
