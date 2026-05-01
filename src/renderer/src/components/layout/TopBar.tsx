@@ -24,6 +24,15 @@ type MonitorMode = 'closed' | 'mini' | 'focus'
 const DRAG_STYLE: CSSProperties = { WebkitAppRegion: 'drag' } as CSSProperties
 const NO_DRAG_STYLE: CSSProperties = { WebkitAppRegion: 'no-drag' } as CSSProperties
 
+// macOS uses `titleBarStyle: 'hiddenInset'` so the native traffic-light
+// buttons (close / minimize / zoom) stay visible at the top-left, AND the
+// OS handles double-click-on-titlebar natively (controlled by the user's
+// "Double-click a window's title bar to" preference). Rendering our custom
+// Min/Max/Close buttons there would duplicate the native controls, and our
+// JS double-click handler would fight the OS handler. Detect once per
+// load.
+const IS_MACOS = window.api.platform === 'darwin'
+
 export function TopBar() {
   const [monitorMode, setMonitorMode] = useState<MonitorMode>('closed')
   const apiKeys = useAppStore((s) => s.apiKeys)
@@ -66,11 +75,15 @@ export function TopBar() {
   // does fire briefly before the OS hijacks the gesture for window dragging,
   // which is enough to hand-roll a 400 ms double-click window.
   //
-  // We skip the toggle when the click landed inside a `[data-no-drag]`
-  // wrapper — those are the badge / button clusters, where double-clicking
-  // a button must NOT maximize the window.
+  // We skip the toggle when:
+  //  - the click landed inside a `[data-no-drag]` wrapper (badge / button
+  //    clusters), where double-clicking a button must NOT maximize, and
+  //  - we're on macOS, where the OS title bar handles double-click natively
+  //    (per the user's System Preferences) and a duplicate JS handler would
+  //    cause the window to flicker between maximized/restored.
   const lastDownRef = useRef<number>(0)
   function handleDragRegionPointerDown(e: React.PointerEvent<HTMLElement>): void {
+    if (IS_MACOS) return
     if (e.button !== 0) return
     const target = e.target as HTMLElement | null
     if (target && target.closest('[data-no-drag]')) return
@@ -221,7 +234,10 @@ export function TopBar() {
         </Tooltip>
       </div>
 
-      <WindowControls maximized={maximized} />
+      {/* On macOS the native traffic-light buttons already render at the
+          top-left thanks to `titleBarStyle: 'hiddenInset'` — drawing our own
+          set on the right would duplicate them. */}
+      {!IS_MACOS && <WindowControls maximized={maximized} />}
 
       <MiniMonitor
         open={monitorMode === 'mini'}
