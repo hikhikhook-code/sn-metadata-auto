@@ -5,6 +5,14 @@ import type { AppFile, FileStatus } from '@renderer/types'
 import { AlertTriangle, FileDown, Eye, Tag } from 'lucide-react'
 import { formatDateTime } from '@renderer/utils/format'
 import { TITLE_HARD_MAX, TITLE_RECOMMENDED_MAX } from '@renderer/utils/title'
+import {
+  applySchema,
+  buildSourceRow,
+  getSchema,
+  PLATFORM_SCHEMAS,
+  type CsvSchema,
+  type Platform
+} from '@renderer/services/csvSchema'
 
 type EmbedMode = 'copy' | 'in-place'
 
@@ -16,7 +24,11 @@ const EMBED_SUPPORTED: ReadonlySet<string> = new Set<string>([
 
 type Scope = 'all' | 'selected' | 'approved' | 'saved' | 'failed'
 
-function fileToRow(f: AppFile): Record<string, unknown> {
+// Legacy generic row used for the in-page Preview table when no platform
+// schema is selected (the preview always shows the canonical source row so
+// the user can see every field we know). Real CSV/XLSX exports go through
+// `applySchema()` so they match the active platform's column layout.
+function fileToPreviewRow(f: AppFile): Record<string, unknown> {
   const m = f.editedMetadata ?? f.aiMetadata
   return {
     original_filename: f.originalFilename,
@@ -56,9 +68,16 @@ export function ExportPage() {
   // subdirectory next to every source file. Pre-fill the folder input with
   // the global path so daily users don't have to retype it on every export.
   const settingsOutputFolder = useAppStore((s) => s.settings.outputFolder)
+  const settingsPlatform = useAppStore((s) => s.settings.platformPreset)
+  const customSchemaSetting = useAppStore((s) => s.settings.customCsvSchema)
 
   const [scope, setScope] = useState<Scope>('all')
   const [format, setFormat] = useState<'csv' | 'txt' | 'json' | 'xlsx'>('csv')
+  // Local export-time platform override. Initializes from the global Settings
+  // preset so the daily user just hits Export with no extra clicks; power
+  // users who export to multiple platforms one after another can switch
+  // platform here without bouncing back to Settings.
+  const [platform, setPlatform] = useState<Platform>(settingsPlatform)
   const [showPreview, setShowPreview] = useState(false)
   const [embedMode, setEmbedMode] = useState<EmbedMode>('copy')
   const [embedBackup, setEmbedBackup] = useState(true)
@@ -93,12 +112,26 @@ export function ExportPage() {
       valid.push(f)
     }
     return {
-      rows: valid.map(fileToRow),
+      rows: valid.map(fileToPreviewRow),
       validFiles: valid,
       dropped: droppedFiles,
       longTitleCount: warnTitle
     }
   }, [files, selected, scope])
+
+  // The schema we'll actually emit when the user clicks Export. Built-in
+  // platforms read from the static registry; Custom pulls from settings.
+  const activeSchema: CsvSchema = useMemo(() => {
+    const customLite: CsvSchema = {
+      label: 'Custom',
+      columns: customSchemaSetting.columns.map((c) => ({
+        header: c.header,
+        source: c.source
+      })),
+      delimiter: customSchemaSetting.delimiter
+    }
+    return getSchema(platform, customLite)
+  }, [platform, customSchemaSetting])
 
   const embedTargets = useMemo(
     () => validFiles.filter((f) => EMBED_SUPPORTED.has(String(f.fileType).toLowerCase())),
@@ -185,14 +218,40 @@ export function ExportPage() {
       showToast('warning', 'Nothing to export with the current scope')
       return
     }
+    // For CSV/XLSX, route through the platform schema. JSON keeps the
+    // canonical source row (more useful for downstream automation) and TXT
+    // keeps its key:value layout.
+    let payloadRows: Record<string, unknown>[] = rows
+    let payloadHeaders: string[] | undefined
+    let payloadDelimiter: ',' | ';' | '\t' | undefined
+    if (format === 'csv' || format === 'xlsx') {
+      const sourceRows = validFiles.map(buildSourceRow)
+      const { headers, data } = applySchema(sourceRows, activeSchema)
+      payloadRows = data.map((cells) => {
+        const obj: Record<string, string> = {}
+        headers.forEach((h, i) => {
+          obj[h] = cells[i] ?? ''
+        })
+        return obj
+      })
+      payloadHeaders = headers
+      if (format === 'csv') payloadDelimiter = activeSchema.delimiter
+    }
+    const platformSlug = platform.toLowerCase().replace(/\s+/g, '-')
     const res = await window.api.exportData({
       format,
-      rows,
-      defaultName: `sn-metadata-${new Date().toISOString().slice(0, 10)}`
+      rows: payloadRows,
+      defaultName: `sn-metadata-${platformSlug}-${new Date().toISOString().slice(0, 10)}`,
+      delimiter: payloadDelimiter,
+      headers: payloadHeaders
     })
     if (res.ok) {
-      addLog('success', 'EXPORT', `Exported ${rows.length} row(s) → ${res.path}`)
-      showToast('success', `Exported ${rows.length} row(s)`)
+      addLog(
+        'success',
+        'EXPORT',
+        `Exported ${rows.length} row(s) (${platform}) → ${res.path}`
+      )
+      showToast('success', `Exported ${rows.length} row(s) for ${platform}`)
       // mark exported
       const exportedAt = new Date().toISOString()
       useAppStore.setState((s) => {
@@ -252,6 +311,39 @@ export function ExportPage() {
             </select>
           </div>
         </div>
+
+        {(format === 'csv' || format === 'xlsx') && (
+          <div className="field" style={{ maxWidth: 320 }}>
+            <span className="label">
+              Platform{' '}
+              <span className="text-muted" style={{ fontWeight: 400 }}>
+                — column layout per microstock site
+              </span>
+            </span>
+            <select
+              className="select"
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value as Platform)}
+            >
+              {Object.entries(PLATFORM_SCHEMAS).map(([key, schema]) => (
+                <option key={key} value={key}>
+                  {schema.label}
+                </option>
+              ))}
+              <option value="Custom">Custom</option>
+            </select>
+            <span className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+              {platform === 'Adobe Stock' &&
+                'Filename, Title, Keywords, Category (auto 1–21), Releases. Comma-delimited.'}
+              {platform === 'Shutterstock' &&
+                'Filename, Description, Keywords, Categories, Editorial, Mature, Illustration. Comma-delimited.'}
+              {platform === 'Freepik' && 'filename, title, keywords. Semicolon-delimited.'}
+              {platform === 'Pond5' && 'Filename, Title, Description, Keywords. Comma-delimited.'}
+              {platform === 'Custom' &&
+                'Edit columns + delimiter in Settings → Advanced → Custom CSV Schema.'}
+            </span>
+          </div>
+        )}
 
         {(dropped.length > 0 || longTitleCount > 0) && (
           <div

@@ -1,14 +1,15 @@
 import { useAppStore } from '@renderer/store/store'
 import { InfoIcon } from '@renderer/components/ui/Tooltip'
-import { ChevronRight, FolderOpen } from 'lucide-react'
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { ChevronRight, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import {
   KEYWORD_COUNT_PRESETS,
   KEYWORD_COUNT_MIN,
   KEYWORD_COUNT_MAX,
   clampKeywordCount
 } from '@renderer/utils/keywordCount'
-import type { SettingsMode } from '@renderer/types'
+import type { AppSettings, SettingsMode } from '@renderer/types'
+import { DEFAULT_CUSTOM_SCHEMA, PLATFORM_SCHEMAS } from '@renderer/services/csvSchema'
 
 const PLATFORM_PRESETS: Array<{
   value: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
@@ -173,6 +174,10 @@ function AdvancedSettings() {
 
       <CollapsibleCard title="Project & UX" defaultOpen>
         <ProjectUxBody />
+      </CollapsibleCard>
+
+      <CollapsibleCard title="Custom CSV Schema" defaultOpen={false}>
+        <CustomCsvSchemaBody />
       </CollapsibleCard>
 
       <CollapsibleCard title="Processing Control" defaultOpen={false}>
@@ -520,6 +525,234 @@ function clampInt(raw: number, min: number, max: number): number {
   if (!Number.isFinite(raw)) return min
   const n = Math.round(raw)
   return Math.max(min, Math.min(max, n))
+}
+
+// ---------------- Custom CSV schema editor ----------------
+
+const SOURCE_KEYS: Array<{
+  value: AppSettings['customCsvSchema']['columns'][number]['source']
+  label: string
+}> = [
+  { value: 'filename', label: 'Filename (current)' },
+  { value: 'originalFilename', label: 'Original filename' },
+  { value: 'newFilename', label: 'New filename (from rename preview)' },
+  { value: 'title', label: 'Title' },
+  { value: 'description', label: 'Description' },
+  { value: 'keywords', label: 'Keywords (joined)' },
+  { value: 'category', label: 'Category (free-text from AI)' },
+  { value: 'adobeCategory', label: 'Adobe Stock category (auto 1\u201321)' },
+  { value: 'fileType', label: 'File type' },
+  { value: 'status', label: 'Status' },
+  { value: 'apiProvider', label: 'API provider' },
+  { value: 'empty', label: 'Empty (blank cell)' }
+]
+
+const DELIMITER_OPTIONS: Array<{ value: ',' | ';' | '\t'; label: string }> = [
+  { value: ',', label: 'Comma  ,' },
+  { value: ';', label: 'Semicolon  ;' },
+  { value: '\t', label: 'Tab' }
+]
+
+function CustomCsvSchemaBody() {
+  const schema = useAppStore((s) => s.settings.customCsvSchema)
+  const platformPreset = useAppStore((s) => s.settings.platformPreset)
+  const update = useAppStore((s) => s.updateSettings)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropTarget, setDropTarget] = useState<number | null>(null)
+
+  const isCustomActive = platformPreset === 'Custom'
+
+  function patchSchema(next: AppSettings['customCsvSchema']) {
+    update({ customCsvSchema: next })
+  }
+
+  function moveColumn(from: number, to: number) {
+    if (from === to || from < 0 || to < 0) return
+    const cols = [...schema.columns]
+    const [item] = cols.splice(from, 1)
+    cols.splice(to, 0, item)
+    patchSchema({ ...schema, columns: cols })
+  }
+
+  function updateColumn(
+    index: number,
+    patch: Partial<AppSettings['customCsvSchema']['columns'][number]>
+  ) {
+    const cols = schema.columns.map((c, i) => (i === index ? { ...c, ...patch } : c))
+    patchSchema({ ...schema, columns: cols })
+  }
+
+  function deleteColumn(index: number) {
+    if (schema.columns.length <= 1) return
+    patchSchema({ ...schema, columns: schema.columns.filter((_, i) => i !== index) })
+  }
+
+  function addColumn() {
+    patchSchema({
+      ...schema,
+      columns: [...schema.columns, { header: 'New column', source: 'empty' }]
+    })
+  }
+
+  function resetTo(name: 'Adobe Stock' | 'Shutterstock' | 'Freepik' | 'Pond5' | 'Default') {
+    if (name === 'Default') {
+      patchSchema({
+        columns: DEFAULT_CUSTOM_SCHEMA.columns.map((c) => ({ ...c })),
+        delimiter: DEFAULT_CUSTOM_SCHEMA.delimiter
+      })
+      return
+    }
+    const src = PLATFORM_SCHEMAS[name]
+    patchSchema({
+      columns: src.columns.map((c) => ({ ...c })),
+      delimiter: src.delimiter
+    })
+  }
+
+  function handleDragStart(e: DragEvent<HTMLDivElement>, index: number) {
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    // Firefox needs *something* in dataTransfer or the drag never starts.
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+  function handleDragOver(e: DragEvent<HTMLDivElement>, index: number) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dropTarget !== index) setDropTarget(index)
+  }
+  function handleDrop(e: DragEvent<HTMLDivElement>, index: number) {
+    e.preventDefault()
+    if (dragIndex !== null) moveColumn(dragIndex, index)
+    setDragIndex(null)
+    setDropTarget(null)
+  }
+  function handleDragEnd() {
+    setDragIndex(null)
+    setDropTarget(null)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <p className="text-soft" style={{ margin: 0, fontSize: 12 }}>
+        These columns are used when{' '}
+        <strong style={{ fontWeight: 600 }}>Platform = Custom</strong> on the Export page. Drag the{' '}
+        <GripVertical size={11} style={{ verticalAlign: '-2px' }} /> handle to reorder. Built-in
+        platform schemas (Adobe Stock, Shutterstock, etc.) are not affected by this editor.
+      </p>
+
+      {!isCustomActive && (
+        <div className="warn-banner" style={{ fontSize: 12 }}>
+          Current Platform Preset is <strong>{platformPreset}</strong>. Switch Platform to{' '}
+          <strong>Custom</strong> on the Export page (or set Platform Preset above to Custom) for
+          this schema to take effect.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {schema.columns.map((col, i) => (
+          <div
+            key={i}
+            draggable
+            onDragStart={(e) => handleDragStart(e, i)}
+            onDragOver={(e) => handleDragOver(e, i)}
+            onDrop={(e) => handleDrop(e, i)}
+            onDragEnd={handleDragEnd}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '20px 1fr 1.4fr 28px',
+              gap: 8,
+              alignItems: 'center',
+              padding: '6px 8px',
+              borderRadius: 6,
+              border:
+                dropTarget === i && dragIndex !== null && dragIndex !== i
+                  ? '1px dashed var(--c-accent-3)'
+                  : '1px solid var(--c-border)',
+              background: dragIndex === i ? 'var(--c-bg-hover, rgba(0,0,0,0.03))' : 'transparent',
+              opacity: dragIndex === i ? 0.6 : 1,
+              cursor: 'grab'
+            }}
+          >
+            <GripVertical size={14} className="text-muted" style={{ flexShrink: 0 }} />
+            <input
+              className="input"
+              value={col.header}
+              onChange={(e) => updateColumn(i, { header: e.target.value })}
+              placeholder="CSV header label"
+              style={{ minWidth: 0 }}
+            />
+            <select
+              className="select"
+              value={col.source}
+              onChange={(e) =>
+                updateColumn(i, {
+                  source: e.target.value as AppSettings['customCsvSchema']['columns'][number]['source']
+                })
+              }
+              style={{ minWidth: 0 }}
+            >
+              {SOURCE_KEYS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              aria-label={`Remove column ${col.header || i + 1}`}
+              disabled={schema.columns.length <= 1}
+              onClick={() => deleteColumn(i)}
+              style={{ padding: 4 }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-sm" onClick={addColumn}>
+          <Plus size={13} /> Add column
+        </button>
+        <span className="text-muted" style={{ fontSize: 12, alignSelf: 'center' }}>
+          Reset to:
+        </span>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Adobe Stock')}>
+          Adobe
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Shutterstock')}>
+          Shutterstock
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Freepik')}>
+          Freepik
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Pond5')}>
+          Pond5
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Default')}>
+          Default
+        </button>
+      </div>
+
+      <div className="field" style={{ maxWidth: 220 }}>
+        <span className="label">Delimiter</span>
+        <select
+          className="select"
+          value={schema.delimiter}
+          onChange={(e) =>
+            patchSchema({ ...schema, delimiter: e.target.value as ',' | ';' | '\t' })
+          }
+        >
+          {DELIMITER_OPTIONS.map((d) => (
+            <option key={d.value} value={d.value}>
+              {d.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
 }
 
 function ProcessingControlBody() {

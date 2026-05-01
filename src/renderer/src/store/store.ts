@@ -27,6 +27,18 @@ const DEFAULT_SETTINGS: AppSettings = {
   settingsMode: 'simple',
   defaultKeywordCount: 49,
   platformPreset: 'Adobe Stock',
+  customCsvSchema: {
+    // Mirrors DEFAULT_CUSTOM_SCHEMA in services/csvSchema.ts. We don't import
+    // it here to avoid a renderer-store -> services circular dependency; the
+    // shape is small and stable.
+    columns: [
+      { header: 'Filename', source: 'filename' },
+      { header: 'Title', source: 'title' },
+      { header: 'Description', source: 'description' },
+      { header: 'Keywords', source: 'keywords' }
+    ],
+    delimiter: ','
+  },
   autoRenameAfterApprove: true,
   autoRenameAfterSuccess: false,
   keepOriginalBackup: true,
