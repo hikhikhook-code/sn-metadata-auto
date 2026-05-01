@@ -29,6 +29,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
+    "exiftool-vendored": "^35.19.0",
     "immer": "^11.1.4",
     "lucide-react": "^1.11.0",
     "nanoid": "^5.1.9",

@@ -11,6 +11,12 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  # exiftool-vendored ships a platform-specific perl/exe distribution that
+  # must remain on disk (not inside app.asar) so child_process can spawn it.
+  # Both the wrapper package and the platform binary packages are unpacked.
+  - node_modules/exiftool-vendored/**
+  - node_modules/exiftool-vendored.exe/**
+  - node_modules/exiftool-vendored.pl/**
 win:
   executableName: sn-metadata-auto
 nsis:

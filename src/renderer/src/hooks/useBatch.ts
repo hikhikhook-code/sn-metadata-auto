@@ -215,6 +215,12 @@ export function useBatchControls() {
             // No more keys to try; stop attempting this file in this loop
             break
           }
+          if (outcome.unsupported) {
+            // File format isn't accepted by any AI vision provider — there is
+            // nothing a retry can fix, so break immediately and let the
+            // outcome handler mark it as Unsupported (not Failed).
+            break
+          }
           // Otherwise loop to retry (if attempts remain)
         }
 
@@ -242,6 +248,19 @@ export function useBatchControls() {
             fileName: null,
             apiKeySlot: outcome.apiKeySlot ?? null
           })
+        } else if (outcome?.unsupported) {
+          const err = outcome.error ?? 'Unsupported file format'
+          useAppStore.getState().setFileStatus(fresh.id, 'Unsupported', err)
+          useAppStore
+            .getState()
+            .addLog('warning', 'WARNING', `${fresh.originalFilename} skipped — ${err}`, {
+              fileId: fresh.id
+            })
+          // Reset consecutive-failure counter so a batch of unsupported files
+          // doesn't accidentally trigger Stop on Too Many Failures.
+          useAppStore.getState().setBatch({ consecutiveFailures: 0 })
+          setWorker(slotId, { fileId: null, fileName: null })
+          continue
         } else {
           const err = outcome?.error ?? 'Unknown error'
           useAppStore.getState().setFileStatus(fresh.id, 'Failed', err)
