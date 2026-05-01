@@ -1,14 +1,25 @@
+import { useEffect, useState } from 'react'
 import type { AppFile } from '@renderer/types'
 import { IMAGE_EXTS, VIDEO_EXTS } from '@renderer/types'
 import { FileVideo2, FileImage, FileBox, FileText, FileQuestion } from 'lucide-react'
+
+const RASTER_PREVIEWABLE = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'])
 
 export function previewSrc(file: AppFile): string | null {
   if (file.previewUrl) return file.previewUrl
   const ext = String(file.fileType).toLowerCase()
   if ((IMAGE_EXTS as readonly string[]).includes(ext) || ext === 'svg') {
     // Use the snfile:// protocol so we don't have to base64-encode large files.
+    // Encode each path segment so spaces, '#', '?', and other URL-significant
+    // characters don't break the protocol handler's URL parsing. The drive
+    // letter on Windows (e.g. "C:") is left as-is so it survives parsing.
     const p = file.currentPath || file.originalPath
-    return `snfile:///${p.replace(/\\/g, '/')}`
+    const encoded = p
+      .replace(/\\/g, '/')
+      .split('/')
+      .map((s, i) => (i === 0 && /^[A-Za-z]:$/.test(s) ? s : encodeURIComponent(s)))
+      .join('/')
+    return `snfile:///${encoded}`
   }
   return null
 }
@@ -25,20 +36,28 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
   const isVideo = (VIDEO_EXTS as readonly string[]).includes(ext)
   const isVector = ext === 'svg' || ext === 'eps'
 
+  const [imgFailed, setImgFailed] = useState(false)
+  // Reset error state when the underlying file/preview source changes so a
+  // newly added file always re-attempts the load instead of staying broken.
+  useEffect(() => {
+    setImgFailed(false)
+  }, [src])
+
+  const showImage = !!src && RASTER_PREVIEWABLE.has(ext) && !imgFailed
+
   const placeholderIcon = isVideo ? (
     <FileVideo2 size={Math.round(size * 0.42)} />
   ) : ext === 'eps' ? (
     <FileBox size={Math.round(size * 0.42)} />
   ) : isVector ? (
     <FileImage size={Math.round(size * 0.42)} />
-  ) : src ? null : ext ? (
+  ) : RASTER_PREVIEWABLE.has(ext) ? (
+    <FileImage size={Math.round(size * 0.42)} />
+  ) : ext ? (
     <FileText size={Math.round(size * 0.42)} />
   ) : (
     <FileQuestion size={Math.round(size * 0.42)} />
   )
-
-  const showImage =
-    src && (ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp' || ext === 'svg')
 
   return (
     <div
@@ -66,9 +85,7 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
             objectFit: 'cover',
             display: 'block'
           }}
-          onError={(e) => {
-            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-          }}
+          onError={() => setImgFailed(true)}
         />
       ) : (
         <div
