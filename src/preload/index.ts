@@ -13,6 +13,13 @@ export interface RenameRequest {
   toFilename: string
   backup: boolean
   addNumberIfDuplicate: boolean
+  /**
+   * Optional absolute output directory. When provided, the file is moved to
+   * this directory under its new name. When omitted (or empty string), the
+   * rename happens in-place inside `dirname(fromPath)`. Backups are produced
+   * differently for the two cases — see the IPC handler for details.
+   */
+  outputDir?: string
 }
 
 export interface RenameResult {

@@ -127,6 +127,10 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
 
       <Card title="File Behavior">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <ToggleField
+            fieldKey="autoEmbedAfterApprove"
+            label="Auto-embed metadata after Approve"
+          />
           <ToggleField fieldKey="autoRenameAfterApprove" label="Auto rename after Approve" />
           <ToggleField fieldKey="keepOriginalBackup" label="Keep original backup" />
         </div>
@@ -257,6 +261,7 @@ function ToggleField({
   fieldKey:
     | 'autoRenameAfterApprove'
     | 'autoRenameAfterSuccess'
+    | 'autoEmbedAfterApprove'
     | 'keepOriginalBackup'
     | 'useTitleCase'
     | 'useLowercaseFilename'
@@ -427,7 +432,7 @@ function RenameRulesBody() {
       <div className="field">
         <span className="label">
           Output Folder{' '}
-          <InfoIcon content="Optional. Used as a default location for exports and backups." />
+          <InfoIcon content="Optional. When set, approved files are moved here (renamed to the AI title) instead of staying alongside the source. Leave empty to rename in place." />
         </span>
         <div className="row" style={{ gap: 6 }}>
           <input
