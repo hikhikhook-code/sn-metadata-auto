@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
-import { IMAGE_EXTS, VIDEO_EXTS, VECTOR_EXTS } from '@renderer/types'
 import type { AppFile, FileStatus } from '@renderer/types'
-import { AlertTriangle, FileDown, Eye, Tag } from 'lucide-react'
+import { AlertTriangle, FileDown, Eye, FolderOpen, Settings as SettingsIcon } from 'lucide-react'
 import { formatDateTime } from '@renderer/utils/format'
 import { TITLE_HARD_MAX, TITLE_RECOMMENDED_MAX } from '@renderer/utils/title'
 import {
@@ -13,14 +12,6 @@ import {
   type CsvSchema,
   type Platform
 } from '@renderer/services/csvSchema'
-
-type EmbedMode = 'copy' | 'in-place'
-
-const EMBED_SUPPORTED: ReadonlySet<string> = new Set<string>([
-  ...IMAGE_EXTS,
-  ...VIDEO_EXTS,
-  ...VECTOR_EXTS
-])
 
 type Scope = 'all' | 'selected' | 'approved' | 'saved' | 'failed'
 
@@ -61,12 +52,12 @@ export function ExportPage() {
   const selected = useAppStore((s) => s.selectedFileIds)
   const showToast = useAppStore((s) => s.showToast)
   const addLog = useAppStore((s) => s.addLog)
-  // settings.outputFolder is the global "send finished files here" path the
-  // user picks in Settings → Rename Rules. When set we want both the
-  // Approve flow (handled in useBatch) AND the manual Quick Export → Embed
-  // flow to write to that folder instead of dropping a sibling "embedded/"
-  // subdirectory next to every source file. Pre-fill the folder input with
-  // the global path so daily users don't have to retype it on every export.
+  const setActivePage = useAppStore((s) => s.setActivePage)
+  // The global Output Folder lives in Settings → Rename Rules and is the
+  // single source of truth for every "finished files go here" path:
+  // Approve auto-rename, manual Approve, embedded copies, etc. The Export
+  // page only displays it as a read-only badge so users always know where
+  // their CSVs reference and where embedded copies have already landed.
   const settingsOutputFolder = useAppStore((s) => s.settings.outputFolder)
   const settingsPlatform = useAppStore((s) => s.settings.platformPreset)
   const customSchemaSetting = useAppStore((s) => s.settings.customCsvSchema)
@@ -79,13 +70,7 @@ export function ExportPage() {
   // platform here without bouncing back to Settings.
   const [platform, setPlatform] = useState<Platform>(settingsPlatform)
   const [showPreview, setShowPreview] = useState(false)
-  const [embedMode, setEmbedMode] = useState<EmbedMode>('copy')
-  const [embedBackup, setEmbedBackup] = useState(true)
-  const [embedFolder, setEmbedFolder] = useState<string>(
-    () => settingsOutputFolder?.trim() || 'embedded'
-  )
-  const [embedRenameToTitle, setEmbedRenameToTitle] = useState(true)
-  const [embedBusy, setEmbedBusy] = useState(false)
+  const trimmedOutputFolder = settingsOutputFolder?.trim() ?? ''
 
   const { rows, validFiles, dropped, longTitleCount } = useMemo(() => {
     let pool = files
@@ -132,86 +117,6 @@ export function ExportPage() {
     }
     return getSchema(platform, customLite)
   }, [platform, customSchemaSetting])
-
-  const embedTargets = useMemo(
-    () => validFiles.filter((f) => EMBED_SUPPORTED.has(String(f.fileType).toLowerCase())),
-    [validFiles]
-  )
-  const embedSkipped = validFiles.length - embedTargets.length
-
-  async function doEmbed() {
-    if (embedTargets.length === 0) {
-      showToast('warning', 'No files in scope support metadata embedding')
-      return
-    }
-    setEmbedBusy(true)
-    try {
-      const payload = embedTargets.map((f) => {
-        const m = f.editedMetadata ?? f.aiMetadata
-        const renamed = (f.renamePreview ?? '').trim()
-        const useRename =
-          embedMode === 'copy' &&
-          embedRenameToTitle &&
-          renamed.length > 0 &&
-          renamed !== f.currentFilename
-        return {
-          filePath: f.currentPath,
-          fileType: String(f.fileType).toLowerCase(),
-          outputBasename: useRename ? renamed : undefined,
-          metadata: {
-            title: m?.title,
-            description: m?.description,
-            keywords: m?.keywords
-          }
-        }
-      })
-      const res = await window.api.metadata.embed({
-        files: payload,
-        mode: embedMode,
-        backup: embedBackup,
-        outputDirName: embedMode === 'copy' ? embedFolder : undefined
-      })
-      const okCount = res.results.filter((r) => r.ok).length
-      const failCount = res.results.length - okCount
-      if (failCount === 0) {
-        addLog(
-          'success',
-          'EMBED',
-          `Embedded metadata into ${okCount} file(s) (mode: ${embedMode})`
-        )
-        showToast('success', `Embedded ${okCount} file(s)`)
-      } else if (okCount === 0) {
-        addLog(
-          'error',
-          'EMBED',
-          `Embed failed for all ${failCount} file(s). First error: ${res.results.find((r) => !r.ok)?.error ?? 'unknown'}`
-        )
-        showToast('error', `Embed failed for all ${failCount} file(s)`)
-      } else {
-        addLog(
-          'warning',
-          'EMBED',
-          `Embedded ${okCount} file(s); ${failCount} failed. First error: ${res.results.find((r) => !r.ok)?.error ?? 'unknown'}`
-        )
-        showToast('warning', `Embedded ${okCount} of ${res.results.length} (${failCount} failed)`)
-      }
-      // Surface per-file failures so the user can see which files broke.
-      for (const r of res.results) {
-        if (!r.ok) {
-          addLog(
-            'error',
-            'EMBED',
-            `Embed failed for ${r.filePath}: ${r.error ?? 'unknown error'}`
-          )
-        }
-      }
-    } catch (err) {
-      addLog('error', 'EMBED', `Embed crashed: ${(err as Error).message}`)
-      showToast('error', `Embed crashed: ${(err as Error).message}`)
-    } finally {
-      setEmbedBusy(false)
-    }
-  }
 
   async function doExport() {
     if (rows.length === 0) {
@@ -282,6 +187,51 @@ export function ExportPage() {
         className="glass-strong"
         style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
       >
+        {/* Read-only badge advertising the global Output Folder. We removed
+            the per-export folder input so users can't accidentally diverge
+            from the global setting; if they want to retarget, the only
+            knob is in Settings → Rename Rules → Output Folder. */}
+        <div
+          className="row"
+          style={{
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '6px 10px',
+            border: '1px solid var(--c-border)',
+            borderRadius: 8,
+            background: 'rgba(255,255,255,0.4)',
+            fontSize: 12
+          }}
+        >
+          <span
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}
+          >
+            <FolderOpen size={14} style={{ flexShrink: 0 }} />
+            <span style={{ flexShrink: 0, fontWeight: 600 }}>Output folder:</span>
+            <code
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                color: trimmedOutputFolder
+                  ? 'var(--c-text-strong)'
+                  : 'var(--c-text-soft)'
+              }}
+              title={trimmedOutputFolder || 'Not set'}
+            >
+              {trimmedOutputFolder || '(not set — using each file\u2019s source folder)'}
+            </code>
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ flexShrink: 0, padding: '4px 8px', fontSize: 12 }}
+            onClick={() => setActivePage('settings')}
+          >
+            <SettingsIcon size={12} /> Change in Settings
+          </button>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="field">
             <span className="label">Scope</span>
@@ -395,134 +345,16 @@ export function ExportPage() {
         </div>
       </div>
 
-      <div
-        className="glass-strong"
-        style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
-      >
-        <div>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Embed metadata into files</h3>
-          <p className="text-soft" style={{ margin: '4px 0 0 0', fontSize: 12 }}>
-            Writes title, description, and keywords directly into each file via XMP / IPTC / EXIF
-            (XMP for SVG and video). Use this when an upload portal (e.g. Adobe Stock) reads
-            metadata from the file itself instead of a separate spreadsheet.
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="field">
-            <span className="label">Mode</span>
-            <select
-              className="select"
-              value={embedMode}
-              onChange={(e) => setEmbedMode(e.target.value as EmbedMode)}
-              disabled={embedBusy}
-            >
-              <option value="copy">Folder copy (safest, originals untouched)</option>
-              <option value="in-place">In-place (overwrite original file)</option>
-            </select>
-          </div>
-          {embedMode === 'copy' ? (
-            <div className="field">
-              <span className="label">Output folder name</span>
-              <input
-                className="input"
-                value={embedFolder}
-                onChange={(e) => setEmbedFolder(e.target.value)}
-                placeholder="embedded"
-                disabled={embedBusy}
-              />
-            </div>
-          ) : (
-            <div className="field" style={{ alignSelf: 'end' }}>
-              <label
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={embedBackup}
-                  onChange={(e) => setEmbedBackup(e.target.checked)}
-                  disabled={embedBusy}
-                />
-                Create <code>.bak</code> backup before first overwrite
-              </label>
-            </div>
-          )}
-        </div>
-
-        {embedMode === 'copy' && (
-          <label
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 13,
-              alignSelf: 'flex-start'
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={embedRenameToTitle}
-              onChange={(e) => setEmbedRenameToTitle(e.target.checked)}
-              disabled={embedBusy}
-            />
-            Rename output to AI title (uses each file&apos;s rename preview)
-          </label>
-        )}
-
-        {embedMode === 'copy' ? (
-          <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
-            {/^([a-zA-Z]:[\\/]|\/)/.test(embedFolder) ? (
-              <>
-                Each file is copied to <code>{embedFolder}</code> before metadata is written.
-                Original files stay untouched.
-              </>
-            ) : (
-              <>
-                Each file is copied to <code>&lt;originalDir&gt;/{embedFolder || 'embedded'}/</code>{' '}
-                before metadata is written. Original files stay untouched.
-              </>
-            )}
-            {embedRenameToTitle
-              ? ' Output filenames use the rename preview from the Editor (or the original name if no preview is set).'
-              : ' Output filenames keep the original name.'}
-          </p>
-        ) : (
-          <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
-            Metadata is written directly into the original file. Recommended only after you have
-            verified results in folder-copy mode at least once.
-          </p>
-        )}
-
-        {embedSkipped > 0 && (
-          <div
-            className="warn-banner"
-            style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}
-          >
-            <AlertTriangle size={14} style={{ marginTop: 2, flexShrink: 0 }} />
-            <span>
-              {embedSkipped} file(s) in scope have a file type the embedder does not support and
-              will be skipped.
-            </span>
-          </div>
-        )}
-
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <span className="text-soft" style={{ fontSize: 13 }}>
-            {embedTargets.length} file(s) ready to embed
-            {embedSkipped > 0 ? ` (${embedSkipped} unsupported)` : ''}.
-          </span>
-          <button
-            className="btn btn-primary"
-            onClick={doEmbed}
-            disabled={embedBusy || embedTargets.length === 0}
-          >
-            <Tag size={14} /> {embedBusy ? 'Embedding…' : 'Embed metadata'}
-          </button>
-        </div>
-      </div>
-
       {showPreview && rows.length > 0 && (
-        <div className="page-body glass" style={{ padding: 8, overflow: 'auto' }}>
+        // Cap the preview height so it stays a reasonable scrollable region
+        // inside the page even with hundreds of files. Without `maxHeight`,
+        // `overflow: auto` does nothing (the parent grows to fit content) so
+        // the bottom rows fall off the bottom of the window with no
+        // scrollbar to reach them.
+        <div
+          className="page-body glass"
+          style={{ padding: 8, overflow: 'auto', maxHeight: '60vh' }}
+        >
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
             <thead>
               <tr>

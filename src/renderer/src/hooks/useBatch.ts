@@ -368,19 +368,22 @@ export function useBatchControls() {
 }
 
 /**
- * Approves a file's metadata, then optionally embeds the metadata into the
- * file and renames/moves it to the configured output folder. The three
- * sub-steps are independently toggle-able from Settings:
- *   - autoEmbedAfterApprove: writes XMP/IPTC/EXIF into the source file
- *   - autoRenameAfterApprove: renames to the AI-generated title
- *   - outputFolder (non-empty): moves the renamed file to that directory
+ * Approves a file's metadata and writes the result to disk.
  *
- * Order matters: we embed before renaming so the metadata is written into
- * the file at its current path, then the rename atomically moves the
- * already-tagged file to the output folder under its new basename. If embed
- * is on but rename is off, the file stays in place with its metadata. If
- * rename is on but embed is off (legacy behavior), only the filename
- * changes.
+ * The flow now branches on whether the user has set a global Output Folder
+ * in Settings → Rename Rules:
+ *
+ *   ▸ Output Folder set (recommended): copy each approved file into the
+ *     Output Folder, optionally renaming to the AI title, then embed
+ *     metadata into the *copy*. The original at the source folder is never
+ *     modified — it's exactly the same bytes as before approval. This is
+ *     the "originals untouched" guarantee the user requested.
+ *
+ *   ▸ Output Folder NOT set (legacy fallback): embed metadata in-place
+ *     into the source file, then optionally rename it where it sits. The
+ *     `keepOriginalBackup` toggle drives a `_originals/` snapshot. This
+ *     path is preserved so the page still works for users who never visit
+ *     Settings, but it does write to the source file.
  *
  * Kept the `useRename` export name so existing call sites (FilesPage,
  * MetadataReviewPage, MetadataEditorPage) don't change.
@@ -401,20 +404,106 @@ export function useRename() {
     }
     const settings = useAppStore.getState().settings
     const target = file.renamePreview || file.currentFilename
+    const outputFolder = (settings.outputFolder ?? '').trim()
+    const useOutputFolder = outputFolder.length > 0
+    // Avoid shadowing the outer `useRename` hook name: this local flag
+    // captures whether the user wants the AI title applied as the new
+    // filename for this approve action.
+    const shouldRename =
+      settings.autoRenameAfterApprove &&
+      target.length > 0 &&
+      target !== file.currentFilename
 
     useAppStore.getState().approveMetadata(fileId)
     useAppStore
       .getState()
       .addLog('success', 'APPROVED', `Approved ${file.originalFilename}`, { fileId })
 
-    // Auto-embed (always on, no toggle): write metadata directly into the
-    // source file before any rename/move happens. We use in-place mode so
-    // the file stays at its current path; the subsequent rename step (if
-    // enabled) handles moving it to the output folder. We pass
-    // `backup: false` here because the rename step below already takes a
-    // `_originals/` snapshot when keepOriginalBackup is on, and we don't
-    // want a duplicate `.bak` sidecar from the embed flow polluting the
-    // source folder.
+    if (useOutputFolder) {
+      // ───────────────────────────────────────────────────────────────────
+      // Path A: copy → embed → leave original untouched.
+      // ───────────────────────────────────────────────────────────────────
+      useAppStore
+        .getState()
+        .addLog('info', 'EMBED', `Using output folder: ${outputFolder}`, { fileId })
+      try {
+        const embedRes = await window.api.metadata.embed({
+          files: [
+            {
+              filePath: file.currentPath,
+              fileType: String(file.fileType),
+              outputBasename: shouldRename ? target : undefined,
+              metadata: {
+                title: meta.title,
+                description: meta.description,
+                keywords: meta.keywords
+              }
+            }
+          ],
+          mode: 'copy',
+          backup: false,
+          outputDirName: outputFolder
+        })
+        const detail = embedRes.results?.[0]
+        if (!embedRes.ok || !detail?.ok || !detail.outputPath) {
+          const reason = detail?.error ?? 'unknown error'
+          useAppStore
+            .getState()
+            .addLog(
+              'error',
+              'EMBED',
+              `Embed-to-output-folder failed for ${file.originalFilename}: ${reason}`,
+              { fileId }
+            )
+          useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
+          return
+        }
+        const outputPath = detail.outputPath
+        const outputName = shouldRename ? target : file.currentFilename
+        useAppStore
+          .getState()
+          .addLog('info', 'EMBED', `Copied file to output folder: ${outputPath}`, { fileId })
+        useAppStore
+          .getState()
+          .addLog(
+            'success',
+            'EMBED',
+            `Embedded metadata into output file: ${outputPath}`,
+            { fileId }
+          )
+        useAppStore
+          .getState()
+          .addLog('info', 'EMBED', `Original file unchanged: ${file.currentPath}`, { fileId })
+        // Re-point the file record at the output copy so subsequent UI
+        // actions (re-export, view, re-embed) operate on the embedded
+        // version, while the original source stays where it was.
+        useAppStore.getState().applyRenameResult(fileId, outputPath, outputName)
+        useAppStore
+          .getState()
+          .addLog(
+            'success',
+            'RENAMED',
+            `${file.originalFilename} → ${outputPath}`,
+            { fileId }
+          )
+        useAppStore.getState().showToast('success', `Saved → ${outputName}`)
+      } catch (err) {
+        const reason = (err as Error).message
+        useAppStore
+          .getState()
+          .addLog('error', 'EMBED', `Embed crashed for ${file.originalFilename}: ${reason}`, {
+            fileId
+          })
+        useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
+      }
+      return
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // Path B (legacy, no Output Folder set): embed in-place + optional
+    // rename in source folder. The original file IS modified here; the
+    // user can opt into a `_originals/` snapshot via keepOriginalBackup.
+    // ───────────────────────────────────────────────────────────────────
     try {
       const embedRes = await window.api.metadata.embed({
         files: [
@@ -471,20 +560,12 @@ export function useRename() {
 
     if (res.ok && res.newPath && res.newFilename) {
       useAppStore.getState().applyRenameResult(fileId, res.newPath, res.newFilename)
-      const moved = !!(settings.outputFolder && settings.outputFolder.length > 0)
       useAppStore
         .getState()
-        .addLog(
-          'success',
-          'RENAMED',
-          moved
-            ? `${file.originalFilename} → ${res.newPath}`
-            : `${file.originalFilename} → ${res.newFilename}`,
-          { fileId }
-        )
-      useAppStore
-        .getState()
-        .showToast('success', moved ? `Moved → ${res.newFilename}` : `Renamed → ${res.newFilename}`)
+        .addLog('success', 'RENAMED', `${file.originalFilename} → ${res.newFilename}`, {
+          fileId
+        })
+      useAppStore.getState().showToast('success', `Renamed → ${res.newFilename}`)
     } else {
       useAppStore
         .getState()
