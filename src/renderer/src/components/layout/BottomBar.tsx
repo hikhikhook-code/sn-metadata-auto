@@ -1,6 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import { CheckCircle2, AlertCircle, Activity, Users, Timer } from 'lucide-react'
+import type { FileStatus } from '@renderer/types'
+
+// Internal statuses that map to the user-facing "Metadata ready" lifecycle
+// stage (see StatusBadge for the full mapping). Kept in sync with
+// `displayStatus()` so the bottom bar count and the per-row badges always
+// agree.
+const METADATA_READY_STATUSES: FileStatus[] = [
+  'Generated',
+  'Saved',
+  'Approved',
+  'Renamed'
+]
+const COMPLETE_STATUSES: FileStatus[] = [
+  ...METADATA_READY_STATUSES,
+  'Edited',
+  'Need Approval',
+  'Exported'
+]
 
 export function BottomBar() {
   const batch = useAppStore((s) => s.batch)
@@ -17,22 +35,23 @@ export function BottomBar() {
   const currentFile = files.find((f) => f.id === batch.currentFileId)
   const total = batch.totalCount || files.length || 1
   const done = batch.successCount + batch.failedCount
+
+  const counts = useMemo(() => {
+    let metadataReady = 0
+    let failed = 0
+    for (const f of files) {
+      if (METADATA_READY_STATUSES.includes(f.status)) metadataReady += 1
+      else if (f.status === 'Failed') failed += 1
+    }
+    return { metadataReady, failed }
+  }, [files])
+
   const pct =
     batch.isRunning || batch.isPaused
       ? Math.min(100, Math.round((done / total) * 100))
       : files.length > 0
         ? Math.round(
-            (files.filter(
-              (f) =>
-                f.status === 'Renamed' ||
-                f.status === 'Approved' ||
-                f.status === 'Saved' ||
-                f.status === 'Generated' ||
-                f.status === 'Edited' ||
-                f.status === 'Exported'
-            ).length /
-              files.length) *
-              100
+            (files.filter((f) => COMPLETE_STATUSES.includes(f.status)).length / files.length) * 100
           )
         : 0
 
@@ -95,6 +114,12 @@ export function BottomBar() {
         <span style={{ fontWeight: 700, color: 'var(--c-text-soft)', minWidth: 36 }}>{pct}%</span>
       </div>
 
+      {/* Activity / state. Idle:
+              "6 files loaded · 3 metadata ready · 0 failed"
+            Processing:
+              "Processing filename.jpg · Workers 1/1 · 3 metadata ready · 0 failed"
+            We render the segments inline as colored chips so the user can
+            visually parse counts at a glance without reading prose. */}
       <div
         style={{
           display: 'flex',
@@ -102,15 +127,22 @@ export function BottomBar() {
           gap: 6,
           color: 'var(--c-text-soft)',
           minWidth: 0,
-          flex: 1.2,
+          flex: 1.6,
           overflow: 'hidden'
         }}
       >
-        <Activity size={13} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Activity size={13} style={{ flexShrink: 0 }} />
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0
+          }}
+        >
           {batch.isRunning
             ? activeWorkers.length > 1
-              ? `Processing ${activeWorkers.length} file${activeWorkers.length === 1 ? '' : 's'}…`
+              ? `Processing ${activeWorkers.length} files`
               : currentFile
                 ? `Processing ${currentFile.originalFilename}`
                 : 'Running…'
@@ -118,21 +150,50 @@ export function BottomBar() {
               ? `Paused at ${currentFile?.originalFilename ?? '—'}`
               : files.length === 0
                 ? 'Idle — add files to begin'
-                : `Idle · ${files.length} file${files.length === 1 ? '' : 's'} loaded`}
+                : `${files.length} file${files.length === 1 ? '' : 's'} loaded`}
+        </span>
+
+        {showWorkerCount && (
+          <>
+            <span style={{ color: 'var(--c-border-strong)' }}>·</span>
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+              title="Active workers"
+            >
+              <Users size={12} />
+              Workers {activeWorkers.length}/{totalWorkers}
+            </span>
+          </>
+        )}
+
+        <span style={{ color: 'var(--c-border-strong)' }}>·</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            flexShrink: 0,
+            color: counts.metadataReady > 0 ? 'var(--c-success)' : 'var(--c-text-soft)'
+          }}
+        >
+          <CheckCircle2 size={12} />
+          {counts.metadataReady} metadata ready
+        </span>
+
+        <span style={{ color: 'var(--c-border-strong)' }}>·</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            flexShrink: 0,
+            color: counts.failed > 0 ? 'var(--c-danger)' : 'var(--c-text-soft)'
+          }}
+        >
+          <AlertCircle size={12} />
+          {counts.failed} failed
         </span>
       </div>
-
-      {showWorkerCount && (
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c-text-soft)' }}
-          title="Active workers"
-        >
-          <Users size={13} />
-          <span>
-            Workers {activeWorkers.length}/{totalWorkers}
-          </span>
-        </div>
-      )}
 
       {firstCooldown && (
         <div
@@ -140,7 +201,8 @@ export function BottomBar() {
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            color: 'var(--c-warning, #92400e)'
+            color: 'var(--c-warning, #92400e)',
+            flexShrink: 0
           }}
           title={`${firstCooldown.provider} Key ${firstCooldown.priority} is in cooldown`}
         >
@@ -150,15 +212,6 @@ export function BottomBar() {
           </span>
         </div>
       )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c-success)' }}>
-        <CheckCircle2 size={13} />
-        <span>{batch.successCount} success</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c-danger)' }}>
-        <AlertCircle size={13} />
-        <span>{batch.failedCount} failed</span>
-      </div>
     </footer>
   )
 }

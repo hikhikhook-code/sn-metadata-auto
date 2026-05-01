@@ -1,9 +1,8 @@
-import { Play, Pause, Square, FileDown, FolderOpen, Save, Activity } from 'lucide-react'
+import { Play, Pause, Square, FileDown, Activity } from 'lucide-react'
 import { useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import { Tooltip } from '../ui/Tooltip'
 import { useBatchControls } from '@renderer/hooks/useBatch'
-import { useProjectActions } from '@renderer/hooks/useProject'
 import { MiniMonitor } from './MiniMonitor'
 
 export function TopBar() {
@@ -16,7 +15,6 @@ export function TopBar() {
   const setActivePage = useAppStore((s) => s.setActivePage)
 
   const { startBatch, stopBatch, resumeBatch } = useBatchControls()
-  const { saveProject, openProject } = useProjectActions()
 
   const activeKey = [...apiKeys]
     .filter((k) => k.enabled && k.apiKey)
@@ -81,32 +79,6 @@ export function TopBar() {
       </Tooltip>
 
       <div style={{ flex: 1 }} />
-
-      <Tooltip content="Open project (.snmproj.json)">
-        <button
-          className="btn btn-sm btn-ghost"
-          onClick={() => {
-            void openProject()
-          }}
-        >
-          <FolderOpen size={14} /> Open
-        </button>
-      </Tooltip>
-
-      <Tooltip content="Save project file">
-        <button
-          className="btn btn-sm btn-ghost"
-          onClick={() => {
-            void saveProject(false)
-          }}
-        >
-          <Save size={14} /> Save
-        </button>
-      </Tooltip>
-
-      <div
-        style={{ width: 1, height: 28, background: 'var(--c-border-strong)', margin: '0 4px' }}
-      />
 
       <Tooltip content="Start batch processing of all Ready files.">
         <button

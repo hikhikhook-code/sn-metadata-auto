@@ -478,6 +478,12 @@ export function useRename() {
         // actions (re-export, view, re-embed) operate on the embedded
         // version, while the original source stays where it was.
         useAppStore.getState().applyRenameResult(fileId, outputPath, outputName)
+        // The file has now been copied to the output folder AND tagged
+        // with metadata, so it has reached the terminal "Exported" state.
+        // (applyRenameResult sets status='Renamed' which would still read
+        // as "Metadata ready" in the UI; bump it to 'Exported' to reflect
+        // that the bytes are in the user's chosen output folder.)
+        useAppStore.getState().setFileStatus(fileId, 'Exported')
         useAppStore
           .getState()
           .addLog(
@@ -486,7 +492,7 @@ export function useRename() {
             `${file.originalFilename} → ${outputPath}`,
             { fileId }
           )
-        useAppStore.getState().showToast('success', `Saved → ${outputName}`)
+        useAppStore.getState().showToast('success', `Exported → ${outputName}`)
       } catch (err) {
         const reason = (err as Error).message
         useAppStore

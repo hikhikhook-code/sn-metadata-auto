@@ -157,12 +157,17 @@ export function ExportPage() {
         `Exported ${rows.length} row(s) (${platform}) → ${res.path}`
       )
       showToast('success', `Exported ${rows.length} row(s) for ${platform}`)
-      // mark exported
+      // mark exported. We bump status to 'Exported' (the terminal "all
+      // done" state in the lifecycle) only when it would actually move the
+      // file forward — never demote a file that's already at Exported and
+      // never overwrite Failed.
       const exportedAt = new Date().toISOString()
       useAppStore.setState((s) => {
         for (const r of rows) {
           const f = s.files.find((x) => x.originalFilename === r.original_filename)
-          if (f) f.exportedAt = exportedAt
+          if (!f) continue
+          f.exportedAt = exportedAt
+          if (f.status !== 'Failed') f.status = 'Exported'
         }
       })
     } else if (res.error) {
