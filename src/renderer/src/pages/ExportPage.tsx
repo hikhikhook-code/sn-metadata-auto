@@ -1,9 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
+import { IMAGE_EXTS, VIDEO_EXTS, VECTOR_EXTS } from '@renderer/types'
 import type { AppFile, FileStatus } from '@renderer/types'
-import { AlertTriangle, FileDown, Eye } from 'lucide-react'
+import { AlertTriangle, FileDown, Eye, Tag } from 'lucide-react'
 import { formatDateTime } from '@renderer/utils/format'
 import { TITLE_HARD_MAX, TITLE_RECOMMENDED_MAX } from '@renderer/utils/title'
+
+type EmbedMode = 'copy' | 'in-place'
+
+const EMBED_SUPPORTED: ReadonlySet<string> = new Set<string>([
+  ...IMAGE_EXTS,
+  ...VIDEO_EXTS,
+  ...VECTOR_EXTS
+])
 
 type Scope = 'all' | 'selected' | 'approved' | 'saved' | 'failed'
 
@@ -44,8 +53,12 @@ export function ExportPage() {
   const [scope, setScope] = useState<Scope>('all')
   const [format, setFormat] = useState<'csv' | 'txt' | 'json' | 'xlsx'>('csv')
   const [showPreview, setShowPreview] = useState(false)
+  const [embedMode, setEmbedMode] = useState<EmbedMode>('copy')
+  const [embedBackup, setEmbedBackup] = useState(true)
+  const [embedFolder, setEmbedFolder] = useState('embedded')
+  const [embedBusy, setEmbedBusy] = useState(false)
 
-  const { rows, dropped, longTitleCount } = useMemo(() => {
+  const { rows, validFiles, dropped, longTitleCount } = useMemo(() => {
     let pool = files
     if (scope === 'selected') pool = files.filter((f) => selected.includes(f.id))
     if (scope === 'approved')
@@ -71,10 +84,84 @@ export function ExportPage() {
     }
     return {
       rows: valid.map(fileToRow),
+      validFiles: valid,
       dropped: droppedFiles,
       longTitleCount: warnTitle
     }
   }, [files, selected, scope])
+
+  const embedTargets = useMemo(
+    () => validFiles.filter((f) => EMBED_SUPPORTED.has(String(f.fileType).toLowerCase())),
+    [validFiles]
+  )
+  const embedSkipped = validFiles.length - embedTargets.length
+
+  async function doEmbed() {
+    if (embedTargets.length === 0) {
+      showToast('warning', 'No files in scope support metadata embedding')
+      return
+    }
+    setEmbedBusy(true)
+    try {
+      const payload = embedTargets.map((f) => {
+        const m = f.editedMetadata ?? f.aiMetadata
+        return {
+          filePath: f.currentPath,
+          fileType: String(f.fileType).toLowerCase(),
+          metadata: {
+            title: m?.title,
+            description: m?.description,
+            keywords: m?.keywords
+          }
+        }
+      })
+      const res = await window.api.metadata.embed({
+        files: payload,
+        mode: embedMode,
+        backup: embedBackup,
+        outputDirName: embedMode === 'copy' ? embedFolder : undefined
+      })
+      const okCount = res.results.filter((r) => r.ok).length
+      const failCount = res.results.length - okCount
+      if (failCount === 0) {
+        addLog(
+          'success',
+          'EMBED',
+          `Embedded metadata into ${okCount} file(s) (mode: ${embedMode})`
+        )
+        showToast('success', `Embedded ${okCount} file(s)`)
+      } else if (okCount === 0) {
+        addLog(
+          'error',
+          'EMBED',
+          `Embed failed for all ${failCount} file(s). First error: ${res.results.find((r) => !r.ok)?.error ?? 'unknown'}`
+        )
+        showToast('error', `Embed failed for all ${failCount} file(s)`)
+      } else {
+        addLog(
+          'warning',
+          'EMBED',
+          `Embedded ${okCount} file(s); ${failCount} failed. First error: ${res.results.find((r) => !r.ok)?.error ?? 'unknown'}`
+        )
+        showToast('warning', `Embedded ${okCount} of ${res.results.length} (${failCount} failed)`)
+      }
+      // Surface per-file failures so the user can see which files broke.
+      for (const r of res.results) {
+        if (!r.ok) {
+          addLog(
+            'error',
+            'EMBED',
+            `Embed failed for ${r.filePath}: ${r.error ?? 'unknown error'}`
+          )
+        }
+      }
+    } catch (err) {
+      addLog('error', 'EMBED', `Embed crashed: ${(err as Error).message}`)
+      showToast('error', `Embed crashed: ${(err as Error).message}`)
+    } finally {
+      setEmbedBusy(false)
+    }
+  }
 
   async function doExport() {
     if (rows.length === 0) {
@@ -196,6 +283,100 @@ export function ExportPage() {
               <FileDown size={14} /> Export {format.toUpperCase()}
             </button>
           </div>
+        </div>
+      </div>
+
+      <div
+        className="glass-strong"
+        style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Embed metadata into files</h3>
+          <p className="text-soft" style={{ margin: '4px 0 0 0', fontSize: 12 }}>
+            Writes title, description, and keywords directly into each file via XMP / IPTC / EXIF
+            (XMP for SVG and video). Use this when an upload portal (e.g. Adobe Stock) reads
+            metadata from the file itself instead of a separate spreadsheet.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <span className="label">Mode</span>
+            <select
+              className="select"
+              value={embedMode}
+              onChange={(e) => setEmbedMode(e.target.value as EmbedMode)}
+              disabled={embedBusy}
+            >
+              <option value="copy">Folder copy (safest, originals untouched)</option>
+              <option value="in-place">In-place (overwrite original file)</option>
+            </select>
+          </div>
+          {embedMode === 'copy' ? (
+            <div className="field">
+              <span className="label">Output folder name</span>
+              <input
+                className="input"
+                value={embedFolder}
+                onChange={(e) => setEmbedFolder(e.target.value)}
+                placeholder="embedded"
+                disabled={embedBusy}
+              />
+            </div>
+          ) : (
+            <div className="field" style={{ alignSelf: 'end' }}>
+              <label
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={embedBackup}
+                  onChange={(e) => setEmbedBackup(e.target.checked)}
+                  disabled={embedBusy}
+                />
+                Create <code>.bak</code> backup before first overwrite
+              </label>
+            </div>
+          )}
+        </div>
+
+        {embedMode === 'copy' ? (
+          <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
+            Each file is copied to <code>&lt;originalDir&gt;/{embedFolder || 'embedded'}/</code>{' '}
+            before metadata is written. Original files stay untouched.
+          </p>
+        ) : (
+          <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
+            Metadata is written directly into the original file. Recommended only after you have
+            verified results in folder-copy mode at least once.
+          </p>
+        )}
+
+        {embedSkipped > 0 && (
+          <div
+            className="warn-banner"
+            style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}
+          >
+            <AlertTriangle size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+            <span>
+              {embedSkipped} file(s) in scope have a file type the embedder does not support and
+              will be skipped.
+            </span>
+          </div>
+        )}
+
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <span className="text-soft" style={{ fontSize: 13 }}>
+            {embedTargets.length} file(s) ready to embed
+            {embedSkipped > 0 ? ` (${embedSkipped} unsupported)` : ''}.
+          </span>
+          <button
+            className="btn btn-primary"
+            onClick={doEmbed}
+            disabled={embedBusy || embedTargets.length === 0}
+          >
+            <Tag size={14} /> {embedBusy ? 'Embedding…' : 'Embed metadata'}
+          </button>
         </div>
       </div>
 

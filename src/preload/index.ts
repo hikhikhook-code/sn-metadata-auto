@@ -91,6 +91,26 @@ const api = {
       error?: string
       status?: string
     }> => ipcRenderer.invoke('ai:generate', input)
+  },
+  metadata: {
+    embed: (req: {
+      files: Array<{
+        filePath: string
+        fileType: string
+        metadata: { title?: string; description?: string; keywords?: string[] }
+      }>
+      mode: 'in-place' | 'copy'
+      backup: boolean
+      outputDirName?: string
+    }): Promise<{
+      ok: boolean
+      results: Array<{
+        filePath: string
+        ok: boolean
+        outputPath?: string
+        error?: string
+      }>
+    }> => ipcRenderer.invoke('metadata:embed', req)
   }
 }
 

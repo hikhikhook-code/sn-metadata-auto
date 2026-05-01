@@ -7,6 +7,7 @@ import { registerFileIpc } from './ipc/files'
 import { registerProjectIpc } from './ipc/project'
 import { registerExportIpc } from './ipc/export'
 import { registerAiIpc } from './ipc/ai'
+import { registerEmbedIpc, shutdownExifTool } from './ipc/embed'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -76,6 +77,7 @@ app.whenReady().then(() => {
   registerProjectIpc()
   registerExportIpc()
   registerAiIpc()
+  registerEmbedIpc()
 
   createWindow()
 
@@ -84,8 +86,15 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  // Stop the persistent exiftool child process before quitting so it doesn't
+  // outlive the renderer window on platforms that keep the app alive.
+  await shutdownExifTool()
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', async () => {
+  await shutdownExifTool()
 })
