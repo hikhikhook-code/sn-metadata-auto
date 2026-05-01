@@ -367,7 +367,24 @@ export function useBatchControls() {
   return { startBatch, stopBatch, resumeBatch, regenerateOne, regenerateFailed }
 }
 
-/** Renames an approved file via main process. */
+/**
+ * Approves a file's metadata, then optionally embeds the metadata into the
+ * file and renames/moves it to the configured output folder. The three
+ * sub-steps are independently toggle-able from Settings:
+ *   - autoEmbedAfterApprove: writes XMP/IPTC/EXIF into the source file
+ *   - autoRenameAfterApprove: renames to the AI-generated title
+ *   - outputFolder (non-empty): moves the renamed file to that directory
+ *
+ * Order matters: we embed before renaming so the metadata is written into
+ * the file at its current path, then the rename atomically moves the
+ * already-tagged file to the output folder under its new basename. If embed
+ * is on but rename is off, the file stays in place with its metadata. If
+ * rename is on but embed is off (legacy behavior), only the filename
+ * changes.
+ *
+ * Kept the `useRename` export name so existing call sites (FilesPage,
+ * MetadataReviewPage, MetadataEditorPage) don't change.
+ */
 export function useRename() {
   return useCallback(async (fileId: string) => {
     const file = useAppStore.getState().files.find((f) => f.id === fileId)
@@ -390,6 +407,57 @@ export function useRename() {
       .getState()
       .addLog('success', 'APPROVED', `Approved ${file.originalFilename}`, { fileId })
 
+    // Auto-embed: write metadata directly into the source file before any
+    // rename/move happens. We use in-place mode so the file stays at its
+    // current path; the subsequent rename step (if enabled) handles moving
+    // it to the output folder. We pass `backup: false` here because the
+    // rename step below already takes a `_originals/` snapshot when
+    // keepOriginalBackup is on, and we don't want a duplicate `.bak`
+    // sidecar from the embed flow polluting the source folder.
+    if (settings.autoEmbedAfterApprove) {
+      try {
+        const embedRes = await window.api.metadata.embed({
+          files: [
+            {
+              filePath: file.currentPath,
+              fileType: String(file.fileType),
+              metadata: {
+                title: meta.title,
+                description: meta.description,
+                keywords: meta.keywords
+              }
+            }
+          ],
+          mode: 'in-place',
+          backup: false
+        })
+        const detail = embedRes.results?.[0]
+        if (!embedRes.ok || !detail?.ok) {
+          const reason = detail?.error ?? 'unknown error'
+          useAppStore
+            .getState()
+            .addLog('error', 'EMBED', `Embed failed for ${file.originalFilename}: ${reason}`, {
+              fileId
+            })
+          useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
+        } else {
+          useAppStore
+            .getState()
+            .addLog('success', 'EMBED', `Embedded metadata into ${file.originalFilename}`, {
+              fileId
+            })
+        }
+      } catch (err) {
+        const reason = (err as Error).message
+        useAppStore
+          .getState()
+          .addLog('error', 'EMBED', `Embed crashed for ${file.originalFilename}: ${reason}`, {
+            fileId
+          })
+        useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
+      }
+    }
+
     if (!settings.autoRenameAfterApprove) {
       return
     }
@@ -398,15 +466,26 @@ export function useRename() {
       fromPath: file.currentPath,
       toFilename: target,
       backup: settings.keepOriginalBackup,
-      addNumberIfDuplicate: settings.addNumberIfDuplicate
+      addNumberIfDuplicate: settings.addNumberIfDuplicate,
+      outputDir: settings.outputFolder
     })
 
     if (res.ok && res.newPath && res.newFilename) {
       useAppStore.getState().applyRenameResult(fileId, res.newPath, res.newFilename)
+      const moved = !!(settings.outputFolder && settings.outputFolder.length > 0)
       useAppStore
         .getState()
-        .addLog('success', 'RENAMED', `${file.originalFilename} → ${res.newFilename}`, { fileId })
-      useAppStore.getState().showToast('success', `Renamed → ${res.newFilename}`)
+        .addLog(
+          'success',
+          'RENAMED',
+          moved
+            ? `${file.originalFilename} → ${res.newPath}`
+            : `${file.originalFilename} → ${res.newFilename}`,
+          { fileId }
+        )
+      useAppStore
+        .getState()
+        .showToast('success', moved ? `Moved → ${res.newFilename}` : `Renamed → ${res.newFilename}`)
     } else {
       useAppStore
         .getState()

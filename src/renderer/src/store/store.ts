@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   platformPreset: 'Adobe Stock',
   autoRenameAfterApprove: true,
   autoRenameAfterSuccess: false,
+  autoEmbedAfterApprove: true,
   keepOriginalBackup: true,
   useTitleCase: false,
   useLowercaseFilename: false,
