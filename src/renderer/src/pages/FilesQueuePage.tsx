@@ -1,4 +1,4 @@
-import { useCallback, useState, DragEvent } from 'react'
+import { useCallback, useState, DragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import { FilePreview } from '@renderer/components/metadata/FilePreview'
 import { StatusBadge } from '@renderer/components/ui/StatusBadge'
@@ -11,7 +11,8 @@ import {
   Eraser,
   Square as SquareIcon,
   CheckSquare,
-  Upload
+  Upload,
+  X
 } from 'lucide-react'
 
 export function FilesQueuePage() {
@@ -84,37 +85,60 @@ export function FilesQueuePage() {
           </p>
         </div>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          <Tooltip content="Pick individual files">
-            <button className="btn btn-primary" onClick={onSelectFiles}>
-              <FilePlus size={14} /> Select Files
-            </button>
-          </Tooltip>
-          <Tooltip content="Pick a folder — all supported files will be added recursively">
-            <button className="btn" onClick={onSelectFolder}>
-              <FolderOpen size={14} /> Select Folder
-            </button>
-          </Tooltip>
-          <Tooltip content="Remove selected files from the queue">
-            <button
-              className="btn"
-              onClick={() => removeFiles(selected)}
-              disabled={selected.length === 0}
-            >
-              <Trash2 size={14} /> Remove Selected
-            </button>
-          </Tooltip>
-          <Tooltip content="Clear all files from the queue">
-            <button
-              className="btn btn-danger"
-              onClick={() => {
-                if (files.length === 0) return
-                if (confirm(`Remove all ${files.length} file(s) from the queue?`)) clearFiles()
-              }}
-              disabled={files.length === 0}
-            >
-              <Eraser size={14} /> Clear Queue
-            </button>
-          </Tooltip>
+          {selected.length > 0 ? (
+            // Selected mode: surface the count + the two actions that
+            // actually apply to the selection. Hide the file/folder pickers
+            // and Clear Queue so the user isn't tempted to wipe everything
+            // when they meant to remove a few rows.
+            <>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'var(--c-accent-strong)',
+                  alignSelf: 'center',
+                  padding: '0 4px'
+                }}
+              >
+                {selected.length} selected
+              </span>
+              <Tooltip content="Remove the selected files from the queue">
+                <button className="btn" onClick={() => removeFiles(selected)}>
+                  <Trash2 size={14} /> Remove selected
+                </button>
+              </Tooltip>
+              <Tooltip content="Deselect all files">
+                <button className="btn btn-ghost" onClick={() => setSelectedFiles([])}>
+                  <X size={14} /> Clear selection
+                </button>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <Tooltip content="Pick individual files">
+                <button className="btn btn-primary" onClick={onSelectFiles}>
+                  <FilePlus size={14} /> Select Files
+                </button>
+              </Tooltip>
+              <Tooltip content="Pick a folder — all supported files will be added recursively">
+                <button className="btn" onClick={onSelectFolder}>
+                  <FolderOpen size={14} /> Select Folder
+                </button>
+              </Tooltip>
+              <Tooltip content="Clear all files from the queue">
+                <button
+                  className="btn btn-danger"
+                  onClick={() => {
+                    if (files.length === 0) return
+                    if (confirm(`Remove all ${files.length} file(s) from the queue?`)) clearFiles()
+                  }}
+                  disabled={files.length === 0}
+                >
+                  <Eraser size={14} /> Clear Queue
+                </button>
+              </Tooltip>
+            </>
+          )}
         </div>
       </div>
 
@@ -179,24 +203,34 @@ export function FilesQueuePage() {
 
             {files.map((file) => {
               const isSel = selected.includes(file.id)
+              const stop = (e: ReactMouseEvent) => e.stopPropagation()
               return (
                 <div
                   key={file.id}
-                  className="glass"
+                  className={`glass queue-row${isSel ? ' selected' : ''}`}
+                  onClick={() => toggleFileSelected(file.id)}
                   style={{
                     padding: '8px 12px',
                     display: 'grid',
                     gridTemplateColumns: '32px 56px 2fr 0.6fr 0.7fr 1fr auto',
                     gap: 10,
-                    alignItems: 'center',
-                    border: isSel ? '1px solid var(--c-accent)' : undefined
+                    alignItems: 'center'
                   }}
                 >
+                  {/* Checkbox is purely a visual indicator + an a11y target.
+                      The click handler is on the row itself so users don't
+                      have to hit the small checkbox to select. We still
+                      stopPropagation here so clicks from assistive tech (or
+                      the rare user who deliberately clicks the box) don't
+                      double-fire and toggle twice. */}
                   <button
-                    className="btn-icon"
-                    onClick={() => toggleFileSelected(file.id)}
+                    className="btn-icon queue-row-checkbox"
+                    onClick={(e) => {
+                      stop(e)
+                      toggleFileSelected(file.id)
+                    }}
                     aria-label={isSel ? 'Deselect' : 'Select'}
-                    style={{ color: isSel ? 'var(--c-accent)' : 'var(--c-text-muted)' }}
+                    style={{ color: isSel ? 'var(--c-accent-strong)' : 'var(--c-text-muted)' }}
                   >
                     {isSel ? <CheckSquare size={16} /> : <SquareIcon size={16} />}
                   </button>
@@ -236,7 +270,10 @@ export function FilesQueuePage() {
                   </span>
                   <button
                     className="btn btn-ghost btn-icon"
-                    onClick={() => removeFiles([file.id])}
+                    onClick={(e) => {
+                      stop(e)
+                      removeFiles([file.id])
+                    }}
                     aria-label="Remove"
                     title="Remove from queue"
                   >

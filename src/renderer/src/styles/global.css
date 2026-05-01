@@ -113,6 +113,34 @@
   border-radius: 8px;
 }
 
+/* Files / Queue row interaction styles. The row itself is clickable to
+   toggle selection; the checkbox/trash buttons stop propagation so they
+   don't steal that click. The checkbox is intentionally subtle (low
+   opacity) until the row is hovered or already selected. */
+.queue-row {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+.queue-row:hover {
+  background: rgba(255, 255, 255, 0.65);
+}
+.queue-row.selected {
+  background: rgba(201, 122, 139, 0.08);
+  border-color: rgba(201, 122, 139, 0.45);
+}
+.queue-row .queue-row-checkbox {
+  opacity: 0.25;
+  transition: opacity 0.12s ease;
+}
+.queue-row:hover .queue-row-checkbox,
+.queue-row.selected .queue-row-checkbox,
+.queue-row .queue-row-checkbox:focus-visible {
+  opacity: 1;
+}
+
 .input,
 .textarea,
 .select {

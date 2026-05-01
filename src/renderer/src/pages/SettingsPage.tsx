@@ -1,7 +1,8 @@
 import { useAppStore } from '@renderer/store/store'
 import { InfoIcon } from '@renderer/components/ui/Tooltip'
-import { ChevronRight, FolderOpen, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, FolderOpen, FolderInput, GripVertical, Plus, Save, Trash2 } from 'lucide-react'
 import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
+import { useProjectActions } from '@renderer/hooks/useProject'
 import {
   KEYWORD_COUNT_PRESETS,
   KEYWORD_COUNT_MIN,
@@ -141,6 +142,7 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
         <div style={{ marginTop: 12, maxWidth: 280 }}>
           <DefaultViewModeField />
         </div>
+        <SessionActions />
       </Card>
 
       <button
@@ -465,16 +467,89 @@ function ProjectUxBody() {
   const settings = useAppStore((s) => s.settings)
   const update = useAppStore((s) => s.updateSettings)
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <div className="field">
-        <span className="label">Log Retention (entries)</span>
-        <input
-          type="number"
-          className="input"
-          value={settings.logRetention}
-          onChange={(e) => update({ logRetention: Number(e.target.value) })}
-        />
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <ToggleField fieldKey="autosaveProject" label="Auto-save project" />
+        <ToggleField fieldKey="tooltipsEnabled" label="Show tooltips" />
+        <div className="field">
+          <span className="label">Log Retention (entries)</span>
+          <input
+            type="number"
+            className="input"
+            value={settings.logRetention}
+            onChange={(e) => update({ logRetention: Number(e.target.value) })}
+          />
+        </div>
       </div>
+      <SessionActions />
+    </>
+  )
+}
+
+/**
+ * Session save/load controls — moved here from the global TopBar so they
+ * sit next to the "Auto-save project" toggle they relate to. A "session"
+ * is the entire app state: file queue, generated metadata, settings, API
+ * keys (encrypted), logs. Saving writes a `.snmproj.json` file the user
+ * can re-open later (e.g. to back up work, share with another machine, or
+ * keep multiple platforms' work separate). Auto-save is on by default and
+ * covers the common case; these buttons are for explicit checkpoints.
+ */
+function SessionActions() {
+  const project = useAppStore((s) => s.project)
+  const { saveProject, openProject } = useProjectActions()
+
+  const lastSaved = project.lastSavedAt
+    ? new Date(project.lastSavedAt).toLocaleString()
+    : null
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        paddingTop: 12,
+        borderTop: '1px solid var(--c-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span className="label" style={{ marginRight: 4 }}>
+          Session
+        </span>
+        <button
+          type="button"
+          className="btn btn-sm"
+          title="Open a previously saved session file (.snmproj.json) — replaces the current queue and metadata."
+          onClick={() => {
+            void openProject()
+          }}
+        >
+          <FolderInput size={14} /> Open Session…
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          title="Write the current queue, metadata, and settings to a session file (.snmproj.json)."
+          onClick={() => {
+            void saveProject(true)
+          }}
+        >
+          <Save size={14} /> Save Session…
+        </button>
+      </div>
+      <p className="section-sub" style={{ margin: 0, fontSize: 11 }}>
+        Backup or move the entire workspace (file queue, generated metadata, settings) to a
+        portable <code>.snmproj.json</code> file.
+        {lastSaved && (
+          <>
+            {' '}
+            Last saved: <strong>{lastSaved}</strong>
+            {project.filePath ? ` · ${project.filePath}` : ''}
+          </>
+        )}
+      </p>
     </div>
   )
 }
