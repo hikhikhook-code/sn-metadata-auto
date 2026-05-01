@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, protocol } from 'electron'
+import { app, shell, BrowserWindow, protocol, ipcMain } from 'electron'
 import { join, extname } from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -37,7 +37,19 @@ const PREVIEW_MIME_BY_EXT: Record<string, string> = {
   svg: 'image/svg+xml'
 }
 
-function createWindow(): void {
+// Cross-platform options for hiding the OS title bar while keeping window
+// chrome behavior (resize handles, snap, restore on dblclick on macOS) sane.
+// macOS keeps the traffic-light buttons inset; Windows hides the entire title
+// bar without the Windows 11 caption-controls overlay (we draw our own); Linux
+// goes fully frameless.
+const FRAMELESS_OPTIONS: Electron.BrowserWindowConstructorOptions =
+  process.platform === 'darwin'
+    ? { titleBarStyle: 'hiddenInset' }
+    : process.platform === 'win32'
+      ? { titleBarStyle: 'hidden', titleBarOverlay: false }
+      : { frame: false }
+
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -48,6 +60,7 @@ function createWindow(): void {
     title: 'SN Metadata Auto',
     backgroundColor: '#fff7f0',
     ...(process.platform === 'linux' ? { icon } : {}),
+    ...FRAMELESS_OPTIONS,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -59,6 +72,23 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Keep the renderer's custom window controls in sync with the actual
+  // platform window state — when the user uses a keyboard shortcut, OS
+  // gesture, or system menu to maximize/restore, our maximize button must
+  // flip its icon to match.
+  function broadcastState(): void {
+    if (mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:state', {
+      maximized: mainWindow.isMaximized(),
+      fullScreen: mainWindow.isFullScreen()
+    })
+  }
+  mainWindow.on('maximize', broadcastState)
+  mainWindow.on('unmaximize', broadcastState)
+  mainWindow.on('enter-full-screen', broadcastState)
+  mainWindow.on('leave-full-screen', broadcastState)
+  mainWindow.on('focus', broadcastState)
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -69,6 +99,31 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
+}
+
+function registerWindowIpc(): void {
+  function focused(): BrowserWindow | null {
+    return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null
+  }
+  ipcMain.handle('window:minimize', () => {
+    focused()?.minimize()
+  })
+  ipcMain.handle('window:toggle-maximize', () => {
+    const w = focused()
+    if (!w) return
+    if (w.isMaximized()) w.unmaximize()
+    else w.maximize()
+  })
+  ipcMain.handle('window:close', () => {
+    focused()?.close()
+  })
+  ipcMain.handle('window:get-state', () => {
+    const w = focused()
+    if (!w) return { maximized: false, fullScreen: false }
+    return { maximized: w.isMaximized(), fullScreen: w.isFullScreen() }
+  })
 }
 
 app.whenReady().then(() => {
@@ -112,6 +167,7 @@ app.whenReady().then(() => {
   // Fire-and-forget: don't block window creation on cache pruning.
   void cleanupVectorPreviewCache()
   registerCryptoIpc()
+  registerWindowIpc()
 
   createWindow()
 

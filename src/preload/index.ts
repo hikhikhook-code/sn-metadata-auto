@@ -142,6 +142,25 @@ const api = {
   crypto: {
     encryptionStatus: (): Promise<{ available: boolean; backend: string }> =>
       ipcRenderer.invoke('crypto:encryption-status')
+  },
+  win: {
+    minimize: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke('window:toggle-maximize'),
+    close: (): Promise<void> => ipcRenderer.invoke('window:close'),
+    getState: (): Promise<{ maximized: boolean; fullScreen: boolean }> =>
+      ipcRenderer.invoke('window:get-state'),
+    onStateChange: (
+      cb: (state: { maximized: boolean; fullScreen: boolean }) => void
+    ): (() => void) => {
+      const listener = (
+        _: unknown,
+        state: { maximized: boolean; fullScreen: boolean }
+      ): void => cb(state)
+      ipcRenderer.on('window:state', listener)
+      return () => {
+        ipcRenderer.removeListener('window:state', listener)
+      }
+    }
   }
 }
 

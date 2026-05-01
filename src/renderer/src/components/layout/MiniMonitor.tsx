@@ -1,14 +1,19 @@
 import { ReactElement, ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppStore } from '@renderer/store/store'
-import { Activity, X, Users, Timer, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Activity, X, Users, Timer, CheckCircle2, AlertCircle, Maximize2 } from 'lucide-react'
 
 interface MiniMonitorProps {
   open: boolean
   onClose: () => void
+  onOpenFocus: () => void
 }
 
-export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement | null {
+export function MiniMonitor({
+  open,
+  onClose,
+  onOpenFocus
+}: MiniMonitorProps): ReactElement | null {
   const batch = useAppStore((s) => s.batch)
   const apiKeys = useAppStore((s) => s.apiKeys)
   const files = useAppStore((s) => s.files)
@@ -108,14 +113,25 @@ export function MiniMonitor({ open, onClose }: MiniMonitorProps): ReactElement |
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}>
           <Activity size={14} /> Mini Monitor
         </div>
-        <button
-          aria-label="Close Mini Monitor"
-          className="btn btn-sm btn-ghost"
-          style={{ padding: 4 }}
-          onClick={onClose}
-        >
-          <X size={14} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            aria-label="Open Focus Monitor"
+            title="Open Focus Monitor"
+            className="btn btn-sm btn-ghost"
+            style={{ padding: 4 }}
+            onClick={onOpenFocus}
+          >
+            <Maximize2 size={13} />
+          </button>
+          <button
+            aria-label="Close Mini Monitor"
+            className="btn btn-sm btn-ghost"
+            style={{ padding: 4 }}
+            onClick={onClose}
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
