@@ -472,12 +472,12 @@ export function useRename() {
 
     if (res.ok && res.newPath && res.newFilename) {
       useAppStore.getState().applyRenameResult(fileId, res.newPath, res.newFilename)
-      const moved = settings.outputFolder && settings.outputFolder.length > 0
+      const moved = !!(settings.outputFolder && settings.outputFolder.length > 0)
       useAppStore
         .getState()
         .addLog(
           'success',
-          moved ? 'MOVED' : 'RENAMED',
+          'RENAMED',
           moved
             ? `${file.originalFilename} → ${res.newPath}`
             : `${file.originalFilename} → ${res.newFilename}`,
