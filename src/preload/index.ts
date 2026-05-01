@@ -36,6 +36,10 @@ const api = {
     path: string
   ): Promise<{ ok: boolean; data?: string; mime?: string; error?: string }> =>
     ipcRenderer.invoke('files:read-base64', path),
+  readThumbnail: (
+    req: { path: string; maxSize?: number }
+  ): Promise<{ ok: boolean; dataUrl?: string; error?: string }> =>
+    ipcRenderer.invoke('files:read-thumbnail', req),
   renameFile: (req: RenameRequest): Promise<RenameResult> =>
     ipcRenderer.invoke('files:rename', req),
   exportData: (payload: ExportPayload): Promise<{ ok: boolean; path?: string; error?: string }> =>

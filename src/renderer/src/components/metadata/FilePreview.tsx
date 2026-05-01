@@ -1,28 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AppFile } from '@renderer/types'
 import { IMAGE_EXTS, VIDEO_EXTS } from '@renderer/types'
 import { FileVideo2, FileImage, FileBox, FileText, FileQuestion } from 'lucide-react'
 
 const RASTER_PREVIEWABLE = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'])
 
-export function previewSrc(file: AppFile): string | null {
-  if (file.previewUrl) return file.previewUrl
-  const ext = String(file.fileType).toLowerCase()
-  if ((IMAGE_EXTS as readonly string[]).includes(ext) || ext === 'svg') {
-    // Use the snfile:// protocol so we don't have to base64-encode large files.
-    // Encode each path segment so spaces, '#', '?', and other URL-significant
-    // characters don't break the protocol handler's URL parsing. The drive
-    // letter on Windows (e.g. "C:") is left as-is so it survives parsing.
-    const p = file.currentPath || file.originalPath
-    const encoded = p
-      .replace(/\\/g, '/')
-      .split('/')
-      .map((s, i) => (i === 0 && /^[A-Za-z]:$/.test(s) ? s : encodeURIComponent(s)))
-      .join('/')
-    return `snfile:///${encoded}`
-  }
-  return null
-}
+// Cache resolved data URLs by file path so re-renders or re-mounts of
+// `FilePreview` don't trigger another IPC round-trip / disk read for the
+// same file. Keyed on the resolved `currentPath || originalPath` so renames
+// invalidate the cache automatically.
+const thumbnailCache = new Map<string, string>()
 
 interface Props {
   file: AppFile
@@ -31,17 +18,61 @@ interface Props {
 }
 
 export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
-  const src = previewSrc(file)
   const ext = String(file.fileType).toLowerCase()
   const isVideo = (VIDEO_EXTS as readonly string[]).includes(ext)
   const isVector = ext === 'svg' || ext === 'eps'
+  const previewable = (IMAGE_EXTS as readonly string[]).includes(ext) || ext === 'svg'
+  const sourcePath = file.currentPath || file.originalPath
 
+  // Use the explicit `previewUrl` if the file already carries one (e.g. from
+  // an external thumbnail service), otherwise we resolve a base64 data URL via
+  // the main process. We do this through the IPC layer rather than exposing a
+  // protocol like `snfile://` because protocol handlers have proven flaky in
+  // production builds across Windows path encodings, while `nativeImage` +
+  // raw fs.readFile is identical in dev and packaged binaries.
+  const initial = file.previewUrl ?? (previewable ? thumbnailCache.get(sourcePath) ?? null : null)
+  const [src, setSrc] = useState<string | null>(initial ?? null)
   const [imgFailed, setImgFailed] = useState(false)
-  // Reset error state when the underlying file/preview source changes so a
-  // newly added file always re-attempts the load instead of staying broken.
+  // Track the latest path we requested so an in-flight IPC for an old path
+  // doesn't overwrite the state of a newer one when scrolling rapidly through
+  // a large queue.
+  const requestedFor = useRef<string | null>(null)
+
   useEffect(() => {
     setImgFailed(false)
-  }, [src])
+    if (file.previewUrl) {
+      setSrc(file.previewUrl)
+      return
+    }
+    if (!previewable) {
+      setSrc(null)
+      return
+    }
+    const cached = thumbnailCache.get(sourcePath)
+    if (cached) {
+      setSrc(cached)
+      return
+    }
+    setSrc(null)
+    requestedFor.current = sourcePath
+    const targetPath = sourcePath
+    const targetMax = Math.max(96, size * 2)
+    void window.api
+      .readThumbnail({ path: targetPath, maxSize: targetMax })
+      .then((res) => {
+        if (requestedFor.current !== targetPath) return
+        if (res.ok && res.dataUrl) {
+          thumbnailCache.set(targetPath, res.dataUrl)
+          setSrc(res.dataUrl)
+        } else {
+          setImgFailed(true)
+        }
+      })
+      .catch(() => {
+        if (requestedFor.current !== targetPath) return
+        setImgFailed(true)
+      })
+  }, [sourcePath, file.previewUrl, previewable, size])
 
   const showImage = !!src && RASTER_PREVIEWABLE.has(ext) && !imgFailed
 
