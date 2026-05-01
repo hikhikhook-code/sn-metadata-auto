@@ -1,6 +1,14 @@
 import { useAppStore } from '@renderer/store/store'
 import { InfoIcon } from '@renderer/components/ui/Tooltip'
-import { ChevronRight, FolderOpen, FolderInput, GripVertical, Plus, Save, Trash2 } from 'lucide-react'
+import {
+  ChevronRight,
+  FolderOpen,
+  FolderInput,
+  GripVertical,
+  Plus,
+  Save,
+  Trash2
+} from 'lucide-react'
 import { useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import { useProjectActions } from '@renderer/hooks/useProject'
 import {
@@ -121,28 +129,19 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
   return (
     <>
       <Card title="General">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
           <PlatformPresetField />
           <DefaultKeywordCountField />
-        </div>
-      </Card>
-
-      <Card title="File Behavior">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <ToggleField fieldKey="autoRenameAfterApprove" label="Auto rename after Approve" />
-          <ToggleField fieldKey="keepOriginalBackup" label="Keep original backup" />
-        </div>
-      </Card>
-
-      <Card title="Project">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <ToggleField fieldKey="autosaveProject" label="Auto-save project" />
-          <ToggleField fieldKey="tooltipsEnabled" label="Show tooltips" />
-        </div>
-        <div style={{ marginTop: 12, maxWidth: 280 }}>
           <DefaultViewModeField />
         </div>
-        <SessionActions />
+      </Card>
+
+      <Card title="Output Files">
+        <OutputFolderField />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+          <AutoRenameOutputToggle />
+          <ToggleField fieldKey="addNumberIfDuplicate" label="Add number if duplicate exists" />
+        </div>
       </Card>
 
       <button
@@ -417,6 +416,35 @@ function DefaultViewModeField() {
 // ---------------- advanced section bodies ----------------
 
 function RenameRulesBody() {
+  return (
+    <>
+      <OutputFolderField />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+        <AutoRenameOutputToggle />
+        <ToggleField
+          fieldKey="autoRenameAfterSuccess"
+          label="Auto rename after metadata Success (no review)"
+        />
+        <ToggleField fieldKey="useTitleCase" label="Use Title Case for filenames" />
+        <ToggleField fieldKey="useLowercaseFilename" label="Use lowercase filenames" />
+        <ToggleField fieldKey="replaceSpacesWithHyphen" label="Replace spaces with hyphen" />
+        <ToggleField fieldKey="addNumberIfDuplicate" label="Add number if duplicate exists" />
+        <ToggleField fieldKey="keepOriginalBackup" label="Keep original backup" />
+      </div>
+    </>
+  )
+}
+
+/**
+ * One global Output Folder. Single source of truth for every “finished
+ * files go here” code path (Approve copy/embed, Save Output Files on the
+ * Export page, etc.). Originals are never modified — the app only writes
+ * copies into this folder. Shown in both Simple and Advanced settings so
+ * the daily user never has to leave Simple mode to point the app at a
+ * folder.
+ */
+function OutputFolderField() {
   const settings = useAppStore((s) => s.settings)
   const update = useAppStore((s) => s.updateSettings)
   const showToast = useAppStore((s) => s.showToast)
@@ -430,36 +458,53 @@ function RenameRulesBody() {
   }
 
   return (
-    <>
-      <div className="field">
-        <span className="label">
-          Output Folder{' '}
-          <InfoIcon content="Optional. When set, approved files are moved here (renamed to the AI title) instead of staying alongside the source. Leave empty to rename in place." />
-        </span>
-        <div className="row" style={{ gap: 6 }}>
-          <input
-            className="input"
-            value={settings.outputFolder}
-            placeholder="(none)"
-            onChange={(e) => update({ outputFolder: e.target.value })}
-          />
-          <button className="btn" onClick={pickFolder}>
-            <FolderOpen size={14} /> Browse
-          </button>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
-        <ToggleField
-          fieldKey="autoRenameAfterSuccess"
-          label="Auto rename after metadata Success (no review)"
+    <div className="field">
+      <span className="label">
+        Output Folder{' '}
+        <InfoIcon content="One global folder. Approved metadata is embedded into a copy that lands here — originals are never changed. Used by Approve and the Save Output Files page. Leave empty to embed in-place into the source file." />
+      </span>
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          className="input"
+          value={settings.outputFolder}
+          placeholder="(none — in-place embed will be used)"
+          onChange={(e) => update({ outputFolder: e.target.value })}
         />
-        <ToggleField fieldKey="useTitleCase" label="Use Title Case for filenames" />
-        <ToggleField fieldKey="useLowercaseFilename" label="Use lowercase filenames" />
-        <ToggleField fieldKey="replaceSpacesWithHyphen" label="Replace spaces with hyphen" />
-        <ToggleField fieldKey="addNumberIfDuplicate" label="Add number if duplicate exists" />
+        <button className="btn" onClick={pickFolder}>
+          <FolderOpen size={14} /> Browse
+        </button>
       </div>
-    </>
+    </div>
+  )
+}
+
+/**
+ * The single “Auto-rename” toggle the user actually thinks about. Renamed
+ * from the historical “Auto rename after Approve” so it matches the new
+ * Output-Files vocabulary and makes it explicit that this is about the
+ * copied output file, never the original.
+ */
+function AutoRenameOutputToggle() {
+  const settings = useAppStore((s) => s.settings)
+  const update = useAppStore((s) => s.updateSettings)
+  return (
+    <label className="row" style={{ gap: 8, fontSize: 13, alignItems: 'flex-start' }}>
+      <input
+        type="checkbox"
+        checked={settings.autoRenameAfterApprove}
+        onChange={(e) => update({ autoRenameAfterApprove: e.target.checked })}
+        style={{ marginTop: 3 }}
+      />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span>
+          Auto-rename output files after metadata is ready{' '}
+          <InfoIcon content="Uses the generated title to name copied output files. Original files stay unchanged." />
+        </span>
+        <span className="text-muted" style={{ fontSize: 11 }}>
+          Uses the generated title to name copied output files. Original files stay unchanged.
+        </span>
+      </span>
+    </label>
   )
 }
 
@@ -499,9 +544,7 @@ function SessionActions() {
   const project = useAppStore((s) => s.project)
   const { saveProject, openProject } = useProjectActions()
 
-  const lastSaved = project.lastSavedAt
-    ? new Date(project.lastSavedAt).toLocaleString()
-    : null
+  const lastSaved = project.lastSavedAt ? new Date(project.lastSavedAt).toLocaleString() : null
 
   return (
     <div
@@ -540,8 +583,8 @@ function SessionActions() {
         </button>
       </div>
       <p className="section-sub" style={{ margin: 0, fontSize: 11 }}>
-        Backup or move the entire workspace (file queue, generated metadata, settings) to a
-        portable <code>.snmproj.json</code> file.
+        Backup or move the entire workspace (file queue, generated metadata, settings) to a portable{' '}
+        <code>.snmproj.json</code> file.
         {lastSaved && (
           <>
             {' '}
@@ -709,10 +752,10 @@ function CustomCsvSchemaBody() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <p className="text-soft" style={{ margin: 0, fontSize: 12 }}>
-        These columns are used when{' '}
-        <strong style={{ fontWeight: 600 }}>Platform = Custom</strong> on the Export page. Drag the{' '}
-        <GripVertical size={11} style={{ verticalAlign: '-2px' }} /> handle to reorder. Built-in
-        platform schemas (Adobe Stock, Shutterstock, etc.) are not affected by this editor.
+        These columns are used when <strong style={{ fontWeight: 600 }}>Platform = Custom</strong>{' '}
+        on the Export page. Drag the <GripVertical size={11} style={{ verticalAlign: '-2px' }} />{' '}
+        handle to reorder. Built-in platform schemas (Adobe Stock, Shutterstock, etc.) are not
+        affected by this editor.
       </p>
 
       {!isCustomActive && (
@@ -761,7 +804,8 @@ function CustomCsvSchemaBody() {
               value={col.source}
               onChange={(e) =>
                 updateColumn(i, {
-                  source: e.target.value as AppSettings['customCsvSchema']['columns'][number]['source']
+                  source: e.target
+                    .value as AppSettings['customCsvSchema']['columns'][number]['source']
                 })
               }
               style={{ minWidth: 0 }}
@@ -793,10 +837,18 @@ function CustomCsvSchemaBody() {
         <span className="text-muted" style={{ fontSize: 12, alignSelf: 'center' }}>
           Reset to:
         </span>
-        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Adobe Stock')}>
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost"
+          onClick={() => resetTo('Adobe Stock')}
+        >
           Adobe
         </button>
-        <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Shutterstock')}>
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost"
+          onClick={() => resetTo('Shutterstock')}
+        >
           Shutterstock
         </button>
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => resetTo('Freepik')}>

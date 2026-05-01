@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/store/store'
 import type { AppFile, FileStatus } from '@renderer/types'
-import { AlertTriangle, FileDown, Eye, FolderOpen, Settings as SettingsIcon } from 'lucide-react'
+import {
+  AlertTriangle,
+  FileDown,
+  Eye,
+  FolderOpen,
+  Save,
+  Settings as SettingsIcon
+} from 'lucide-react'
 import { formatDateTime } from '@renderer/utils/format'
 import { TITLE_HARD_MAX, TITLE_RECOMMENDED_MAX } from '@renderer/utils/title'
 import {
@@ -13,7 +20,23 @@ import {
   type Platform
 } from '@renderer/services/csvSchema'
 
-type Scope = 'all' | 'selected' | 'approved' | 'saved' | 'failed'
+/**
+ * Six scope filters. The user-facing names match the spec; the implementation
+ * here translates each to the internal `FileStatus` enum.
+ *
+ *   - Successful files only  : Approved + Metadata ready (anything that
+ *                              successfully produced metadata)
+ *   - Selected files only    : whatever the user has ticked in the queue
+ *   - Approved files only    : explicit Approved status (post-review)
+ *   - Metadata ready files   : has AI metadata but not yet approved
+ *   - All files              : everything in the queue
+ *   - Failed files report    : sheet-only failure report (no copy/embed)
+ */
+type Scope = 'successful' | 'selected' | 'approved' | 'metadataReady' | 'all' | 'failed'
+
+const SUCCESSFUL_STATUSES: FileStatus[] = ['Generated', 'Saved', 'Approved', 'Renamed', 'Exported']
+
+const METADATA_READY_STATUSES: FileStatus[] = ['Generated', 'Saved', 'Approved', 'Renamed']
 
 // Legacy generic row used for the in-page Preview table when no platform
 // schema is selected (the preview always shows the canonical source row so
@@ -38,14 +61,17 @@ function fileToPreviewRow(f: AppFile): Record<string, unknown> {
   }
 }
 
-const COMPLETE_STATUSES: FileStatus[] = [
-  'Generated',
-  'Edited',
-  'Saved',
-  'Approved',
-  'Renamed',
-  'Exported'
-]
+function fileToFailureRow(f: AppFile): Record<string, unknown> {
+  return {
+    original_filename: f.originalFilename,
+    current_filename: f.currentFilename,
+    file_type: String(f.fileType).toLowerCase(),
+    status: f.status,
+    api_provider: f.apiProvider ?? '',
+    api_key_used: f.apiKeySlot ?? '',
+    error_message: f.errorMessage ?? ''
+  }
+}
 
 export function ExportPage() {
   const files = useAppStore((s) => s.files)
@@ -53,34 +79,59 @@ export function ExportPage() {
   const showToast = useAppStore((s) => s.showToast)
   const addLog = useAppStore((s) => s.addLog)
   const setActivePage = useAppStore((s) => s.setActivePage)
-  // The global Output Folder lives in Settings → Rename Rules and is the
+  // The global Output Folder lives in Settings → Output Files and is the
   // single source of truth for every "finished files go here" path:
-  // Approve auto-rename, manual Approve, embedded copies, etc. The Export
-  // page only displays it as a read-only badge so users always know where
-  // their CSVs reference and where embedded copies have already landed.
+  // Approve auto-rename, manual Approve, embedded copies, the Save Output
+  // Files button on this page. The page only displays it as a read-only
+  // badge so users always know where copies will land.
   const settingsOutputFolder = useAppStore((s) => s.settings.outputFolder)
   const settingsPlatform = useAppStore((s) => s.settings.platformPreset)
   const customSchemaSetting = useAppStore((s) => s.settings.customCsvSchema)
+  const settings = useAppStore((s) => s.settings)
+  const settingsMode = settings.settingsMode ?? 'simple'
+  const isSimpleMode = settingsMode === 'simple'
 
-  const [scope, setScope] = useState<Scope>('all')
+  // Simple mode hides the scope dropdown entirely and forces "Successful
+  // files only" so the daily user just clicks Save Output Files and the
+  // app does the obvious thing.
+  const [scopeAdv, setScopeAdv] = useState<Scope>('successful')
+  const scope: Scope = isSimpleMode ? 'successful' : scopeAdv
+  const isFailedReport = scope === 'failed'
+
+  const [includeSheet, setIncludeSheet] = useState(false)
   const [format, setFormat] = useState<'csv' | 'txt' | 'json' | 'xlsx'>('csv')
-  // Local export-time platform override. Initializes from the global Settings
-  // preset so the daily user just hits Export with no extra clicks; power
-  // users who export to multiple platforms one after another can switch
-  // platform here without bouncing back to Settings.
   const [platform, setPlatform] = useState<Platform>(settingsPlatform)
   const [showPreview, setShowPreview] = useState(false)
+  const [saving, setSaving] = useState(false)
   const trimmedOutputFolder = settingsOutputFolder?.trim() ?? ''
 
-  const { rows, validFiles, dropped, longTitleCount } = useMemo(() => {
+  // For the failure-report scope the sheet is the *only* output, so force
+  // the checkbox on whenever the user is in that scope. Likewise, leaving
+  // it on when they switch back to a normal scope is fine — it just adds a
+  // sheet alongside the saved copies.
+  const sheetEnabled = isFailedReport ? true : includeSheet
+
+  const { rows, validFiles, dropped, longTitleCount, scopePool } = useMemo(() => {
     let pool = files
+    if (scope === 'successful') pool = files.filter((f) => SUCCESSFUL_STATUSES.includes(f.status))
     if (scope === 'selected') pool = files.filter((f) => selected.includes(f.id))
     if (scope === 'approved')
-      pool = files.filter(
-        (f) => f.status === 'Approved' || f.status === 'Renamed' || f.status === 'Exported'
-      )
-    if (scope === 'saved') pool = files.filter((f) => COMPLETE_STATUSES.includes(f.status))
+      pool = files.filter((f) => f.status === 'Approved' || f.status === 'Exported')
+    if (scope === 'metadataReady')
+      pool = files.filter((f) => METADATA_READY_STATUSES.includes(f.status))
     if (scope === 'failed') pool = files.filter((f) => f.status === 'Failed')
+
+    if (scope === 'failed') {
+      // Failure report: no metadata required, just emit one row per failed
+      // file with the error message attached.
+      return {
+        rows: pool.map(fileToFailureRow),
+        validFiles: [] as AppFile[],
+        dropped: [] as AppFile[],
+        longTitleCount: 0,
+        scopePool: pool
+      }
+    }
 
     const withMeta = pool.filter((f) => f.aiMetadata || f.editedMetadata)
     const droppedFiles: AppFile[] = []
@@ -100,11 +151,12 @@ export function ExportPage() {
       rows: valid.map(fileToPreviewRow),
       validFiles: valid,
       dropped: droppedFiles,
-      longTitleCount: warnTitle
+      longTitleCount: warnTitle,
+      scopePool: pool
     }
   }, [files, selected, scope])
 
-  // The schema we'll actually emit when the user clicks Export. Built-in
+  // The schema we'll actually emit when the user writes a sheet. Built-in
   // platforms read from the static registry; Custom pulls from settings.
   const activeSchema: CsvSchema = useMemo(() => {
     const customLite: CsvSchema = {
@@ -118,18 +170,18 @@ export function ExportPage() {
     return getSchema(platform, customLite)
   }, [platform, customSchemaSetting])
 
-  async function doExport() {
-    if (rows.length === 0) {
-      showToast('warning', 'Nothing to export with the current scope')
-      return
-    }
-    // For CSV/XLSX, route through the platform schema. JSON keeps the
-    // canonical source row (more useful for downstream automation) and TXT
-    // keeps its key:value layout.
+  // Files we'd actually copy+embed: those with metadata that haven't
+  // already been Exported. Approved/Metadata-ready files are the typical
+  // case; once Exported their bytes are already in the output folder so we
+  // don't re-copy.
+  const filesToCopy = useMemo(() => validFiles.filter((f) => f.status !== 'Exported'), [validFiles])
+
+  async function writeSheet(): Promise<boolean> {
+    if (rows.length === 0) return false
     let payloadRows: Record<string, unknown>[] = rows
     let payloadHeaders: string[] | undefined
     let payloadDelimiter: ',' | ';' | '\t' | undefined
-    if (format === 'csv' || format === 'xlsx') {
+    if (!isFailedReport && (format === 'csv' || format === 'xlsx')) {
       const sourceRows = validFiles.map(buildSourceRow)
       const { headers, data } = applySchema(sourceRows, activeSchema)
       payloadRows = data.map((cells) => {
@@ -142,48 +194,164 @@ export function ExportPage() {
       payloadHeaders = headers
       if (format === 'csv') payloadDelimiter = activeSchema.delimiter
     }
-    const platformSlug = platform.toLowerCase().replace(/\s+/g, '-')
+    const stamp = new Date().toISOString().slice(0, 10)
+    const defaultName = isFailedReport
+      ? `sn-metadata-failure-report-${stamp}`
+      : `sn-metadata-${platform.toLowerCase().replace(/\s+/g, '-')}-${stamp}`
     const res = await window.api.exportData({
       format,
       rows: payloadRows,
-      defaultName: `sn-metadata-${platformSlug}-${new Date().toISOString().slice(0, 10)}`,
+      defaultName,
       delimiter: payloadDelimiter,
       headers: payloadHeaders
     })
     if (res.ok) {
+      const tag = isFailedReport ? 'failure report' : `${platform}`
       addLog(
         'success',
         'EXPORT',
-        `Exported ${rows.length} row(s) (${platform}) → ${res.path}`
+        `Wrote metadata sheet (${tag}, ${rows.length} rows) → ${res.path}`
       )
-      showToast('success', `Exported ${rows.length} row(s) for ${platform}`)
-      // mark exported. We bump status to 'Exported' (the terminal "all
-      // done" state in the lifecycle) only when it would actually move the
-      // file forward — never demote a file that's already at Exported and
-      // never overwrite Failed.
-      const exportedAt = new Date().toISOString()
-      useAppStore.setState((s) => {
-        for (const r of rows) {
-          const f = s.files.find((x) => x.originalFilename === r.original_filename)
-          if (!f) continue
-          f.exportedAt = exportedAt
-          if (f.status !== 'Failed') f.status = 'Exported'
-        }
-      })
+      showToast('success', `Sheet written: ${rows.length} row(s)`)
+      // Spreadsheet-only writes never bump status to Exported. The
+      // "Exported" lifecycle marker is reserved for "bytes have landed in
+      // the output folder via copy/embed" — see handleSaveOutput below.
+      return true
     } else if (res.error) {
-      addLog('error', 'EXPORT', `Export failed: ${res.error}`)
-      showToast('error', `Export failed: ${res.error}`)
+      addLog('error', 'EXPORT', `Sheet write failed: ${res.error}`)
+      showToast('error', `Sheet write failed: ${res.error}`)
+    }
+    return false
+  }
+
+  async function copyAndEmbedOne(file: AppFile, outputFolder: string): Promise<boolean> {
+    const meta = file.editedMetadata ?? file.aiMetadata
+    if (!meta) return false
+    const target = file.renamePreview || file.currentFilename
+    const shouldRename =
+      settings.autoRenameAfterApprove && target.length > 0 && target !== file.currentFilename
+    try {
+      const embedRes = await window.api.metadata.embed({
+        files: [
+          {
+            filePath: file.currentPath,
+            fileType: String(file.fileType),
+            outputBasename: shouldRename ? target : undefined,
+            metadata: {
+              title: meta.title,
+              description: meta.description,
+              keywords: meta.keywords
+            }
+          }
+        ],
+        mode: 'copy',
+        backup: false,
+        outputDirName: outputFolder
+      })
+      const detail = embedRes.results?.[0]
+      if (!embedRes.ok || !detail?.ok || !detail.outputPath) {
+        const reason = detail?.error ?? 'unknown error'
+        addLog(
+          'error',
+          'EMBED',
+          `Save Output Files failed for ${file.originalFilename}: ${reason}`,
+          {
+            fileId: file.id
+          }
+        )
+        return false
+      }
+      const outputPath = detail.outputPath
+      const outputName = shouldRename ? target : file.currentFilename
+      addLog('success', 'EMBED', `Saved output file: ${outputPath}`, { fileId: file.id })
+      addLog('info', 'EMBED', `Original file unchanged: ${file.currentPath}`, { fileId: file.id })
+      // Re-point the file record at the output copy and bump status to
+      // 'Exported' — copy+embed succeeded, the file is in the output
+      // folder, lifecycle reaches its terminal state.
+      useAppStore.getState().applyRenameResult(file.id, outputPath, outputName)
+      useAppStore.getState().setFileStatus(file.id, 'Exported')
+      return true
+    } catch (err) {
+      const reason = (err as Error).message
+      addLog(
+        'error',
+        'EMBED',
+        `Save Output Files crashed for ${file.originalFilename}: ${reason}`,
+        {
+          fileId: file.id
+        }
+      )
+      return false
     }
   }
+
+  async function handleSaveOutput() {
+    if (saving) return
+    if (isFailedReport) {
+      // Failed report: sheet-only, no copy/embed, no status bump.
+      if (rows.length === 0) {
+        showToast('warning', 'No failed files in the queue')
+        return
+      }
+      setSaving(true)
+      try {
+        await writeSheet()
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+
+    if (!trimmedOutputFolder) {
+      showToast('warning', 'Set an Output Folder in Settings before saving output files')
+      setActivePage('settings')
+      return
+    }
+    if (filesToCopy.length === 0 && !sheetEnabled) {
+      showToast('warning', 'Nothing to save in the current scope')
+      return
+    }
+
+    setSaving(true)
+    try {
+      let succeeded = 0
+      let failed = 0
+      for (const f of filesToCopy) {
+        const ok = await copyAndEmbedOne(f, trimmedOutputFolder)
+        if (ok) succeeded++
+        else failed++
+      }
+      if (filesToCopy.length > 0) {
+        const summary =
+          failed === 0
+            ? `Saved ${succeeded} output file(s) to ${trimmedOutputFolder}`
+            : `Saved ${succeeded} of ${filesToCopy.length} (${failed} failed)`
+        showToast(failed === 0 ? 'success' : 'warning', summary)
+      }
+      if (sheetEnabled) {
+        await writeSheet()
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const outputFolderMissing = !trimmedOutputFolder && !isFailedReport
+  const saveDisabled =
+    saving ||
+    (isFailedReport && rows.length === 0) ||
+    (!isFailedReport && filesToCopy.length === 0 && !sheetEnabled) ||
+    outputFolderMissing
+
+  const primaryButtonLabel = isFailedReport ? 'Export Failure Report' : 'Save Output Files'
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h2 className="section-title">Export</h2>
+          <h2 className="section-title">Save Output Files</h2>
           <p className="section-sub">
-            Export metadata to CSV, TXT, JSON, or XLSX. Keywords are written as a comma-separated
-            list inside one cell.
+            Create upload-ready copies in the output folder. Original files stay unchanged.
           </p>
         </div>
       </div>
@@ -192,10 +360,9 @@ export function ExportPage() {
         className="glass-strong"
         style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}
       >
-        {/* Read-only badge advertising the global Output Folder. We removed
-            the per-export folder input so users can't accidentally diverge
-            from the global setting; if they want to retarget, the only
-            knob is in Settings → Rename Rules → Output Folder. */}
+        {/* Read-only Output Folder badge. The only knob is in Settings →
+            Output Files → Output Folder; clicking "Change in Settings"
+            jumps the user there. */}
         <div
           className="row"
           style={{
@@ -208,9 +375,7 @@ export function ExportPage() {
             fontSize: 12
           }}
         >
-          <span
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}
-          >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <FolderOpen size={14} style={{ flexShrink: 0 }} />
             <span style={{ flexShrink: 0, fontWeight: 600 }}>Output folder:</span>
             <code
@@ -218,13 +383,11 @@ export function ExportPage() {
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                color: trimmedOutputFolder
-                  ? 'var(--c-text-strong)'
-                  : 'var(--c-text-soft)'
+                color: trimmedOutputFolder ? 'var(--c-text-strong)' : 'var(--c-text-soft)'
               }}
               title={trimmedOutputFolder || 'Not set'}
             >
-              {trimmedOutputFolder || '(not set — using each file\u2019s source folder)'}
+              {trimmedOutputFolder || '(not set)'}
             </code>
           </span>
           <button
@@ -237,76 +400,128 @@ export function ExportPage() {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="field">
+        {/* Scope dropdown — hidden in Simple mode (we always use Successful) */}
+        {!isSimpleMode && (
+          <div className="field" style={{ maxWidth: 360 }}>
             <span className="label">Scope</span>
             <select
               className="select"
-              value={scope}
-              onChange={(e) => setScope(e.target.value as Scope)}
+              value={scopeAdv}
+              onChange={(e) => setScopeAdv(e.target.value as Scope)}
             >
-              <option value="all">All files</option>
+              <option value="successful">Successful files only</option>
               <option value="selected">Selected files only</option>
-              <option value="approved">Approved / Renamed / Exported only</option>
-              <option value="saved">Saved (any completed)</option>
-              <option value="failed">Failed (failure report)</option>
+              <option value="approved">Approved files only</option>
+              <option value="metadataReady">Metadata ready files</option>
+              <option value="all">All files</option>
+              <option value="failed">Failed files report</option>
             </select>
-          </div>
-          <div className="field">
-            <span className="label">Format</span>
-            <select
-              className="select"
-              value={format}
-              onChange={(e) => setFormat(e.target.value as 'csv' | 'txt' | 'json' | 'xlsx')}
-            >
-              <option value="csv">CSV</option>
-              <option value="xlsx">XLSX</option>
-              <option value="json">JSON</option>
-              <option value="txt">TXT</option>
-            </select>
-          </div>
-        </div>
-
-        {(format === 'csv' || format === 'xlsx') && (
-          <div className="field" style={{ maxWidth: 320 }}>
-            <span className="label">
-              Platform{' '}
-              <span className="text-muted" style={{ fontWeight: 400 }}>
-                — column layout per microstock site
-              </span>
-            </span>
-            <select
-              className="select"
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value as Platform)}
-            >
-              {Object.entries(PLATFORM_SCHEMAS).map(([key, schema]) => (
-                <option key={key} value={key}>
-                  {schema.label}
-                </option>
-              ))}
-              <option value="Custom">Custom</option>
-            </select>
-            <span className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-              {platform === 'Adobe Stock' &&
-                'Filename, Title, Keywords, Category (auto 1–21), Releases. Comma-delimited.'}
-              {platform === 'Shutterstock' &&
-                'Filename, Description, Keywords, Categories, Editorial, Mature, Illustration. Comma-delimited.'}
-              {platform === 'Freepik' && 'filename, title, keywords. Semicolon-delimited.'}
-              {platform === 'Pond5' && 'Filename, Title, Description, Keywords. Comma-delimited.'}
-              {platform === 'Custom' &&
-                'Edit columns + delimiter in Settings → Advanced → Custom CSV Schema.'}
+            <span className="text-muted" style={{ fontSize: 11, marginTop: 4 }}>
+              {scope === 'successful' &&
+                'Approved + Metadata ready. Skips Ready / Processing / Failed.'}
+              {scope === 'selected' && 'Whatever you have ticked in the Files queue.'}
+              {scope === 'approved' && 'Only files explicitly Approved (post-review).'}
+              {scope === 'metadataReady' &&
+                'Has AI metadata but may not be Approved yet. Skips Failed.'}
+              {scope === 'all' && 'Every file in the queue.'}
+              {scope === 'failed' &&
+                'Sheet-only failure report. No output files are saved and no status changes.'}
             </span>
           </div>
         )}
 
-        {(dropped.length > 0 || longTitleCount > 0) && (
+        {/* Optional metadata sheet */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            padding: '10px 12px',
+            border: '1px solid var(--c-border)',
+            borderRadius: 8,
+            background: 'rgba(255,255,255,0.35)'
+          }}
+        >
+          <label
+            className="row"
+            style={{
+              gap: 8,
+              fontSize: 13,
+              alignItems: 'center',
+              cursor: isFailedReport ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={sheetEnabled}
+              disabled={isFailedReport}
+              onChange={(e) => setIncludeSheet(e.target.checked)}
+            />
+            <span>Include metadata sheet</span>
+            {isFailedReport && (
+              <span className="text-muted" style={{ fontSize: 11 }}>
+                (always on for failure reports)
+              </span>
+            )}
+          </label>
+          {sheetEnabled && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 12,
+                marginTop: 4
+              }}
+            >
+              <div className="field">
+                <span className="label">Format</span>
+                <select
+                  className="select"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as 'csv' | 'txt' | 'json' | 'xlsx')}
+                >
+                  <option value="csv">CSV</option>
+                  <option value="xlsx">XLSX</option>
+                  <option value="json">JSON</option>
+                  <option value="txt">TXT</option>
+                </select>
+              </div>
+              {!isFailedReport && (format === 'csv' || format === 'xlsx') && (
+                <div className="field">
+                  <span className="label">
+                    Platform{' '}
+                    <span className="text-muted" style={{ fontWeight: 400 }}>
+                      — column layout per microstock site
+                    </span>
+                  </span>
+                  <select
+                    className="select"
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value as Platform)}
+                  >
+                    {Object.entries(PLATFORM_SCHEMAS).map(([key, schema]) => (
+                      <option key={key} value={key}>
+                        {schema.label}
+                      </option>
+                    ))}
+                    <option value="Custom">Custom</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {(dropped.length > 0 || longTitleCount > 0 || outputFolderMissing) && (
           <div
             className="warn-banner"
             style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'flex-start' }}
           >
             <AlertTriangle size={14} style={{ marginTop: 2, flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {outputFolderMissing && (
+                <span>Set an Output Folder in Settings to enable saving output files.</span>
+              )}
               {dropped.length > 0 && (
                 <span>
                   {dropped.length} file(s) skipped — title is empty or longer than {TITLE_HARD_MAX}{' '}
@@ -330,12 +545,21 @@ export function ExportPage() {
           </div>
         )}
 
-        <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span className="text-soft" style={{ fontSize: 13 }}>
-            {rows.length} row(s) ready to export
-            {dropped.length > 0 ? ` (${dropped.length} skipped)` : ''}.
+            {isFailedReport
+              ? `${rows.length} failed file(s) in scope`
+              : `${filesToCopy.length} file(s) ready to save${
+                  validFiles.length - filesToCopy.length > 0
+                    ? ` · ${validFiles.length - filesToCopy.length} already exported`
+                    : ''
+                }${dropped.length > 0 ? ` · ${dropped.length} skipped` : ''}${
+                  scopePool.length - validFiles.length - dropped.length > 0
+                    ? ` · ${scopePool.length - validFiles.length - dropped.length} without metadata`
+                    : ''
+                }`}
           </span>
-          <div className="row">
+          <div className="row" style={{ gap: 8 }}>
             <button
               className="btn"
               onClick={() => setShowPreview((v) => !v)}
@@ -343,19 +567,22 @@ export function ExportPage() {
             >
               <Eye size={14} /> {showPreview ? 'Hide Preview' : 'Preview'}
             </button>
-            <button className="btn btn-primary" onClick={doExport} disabled={rows.length === 0}>
-              <FileDown size={14} /> Export {format.toUpperCase()}
+            <button
+              className="btn btn-primary"
+              onClick={() => void handleSaveOutput()}
+              disabled={saveDisabled}
+              title={
+                outputFolderMissing ? 'Set an Output Folder in Settings first' : primaryButtonLabel
+              }
+            >
+              {isFailedReport ? <FileDown size={14} /> : <Save size={14} />}{' '}
+              {saving ? 'Saving…' : primaryButtonLabel}
             </button>
           </div>
         </div>
       </div>
 
       {showPreview && rows.length > 0 && (
-        // Cap the preview height so it stays a reasonable scrollable region
-        // inside the page even with hundreds of files. Without `maxHeight`,
-        // `overflow: auto` does nothing (the parent grows to fit content) so
-        // the bottom rows fall off the bottom of the window with no
-        // scrollbar to reach them.
         <div
           className="page-body glass"
           style={{ padding: 8, overflow: 'auto', maxHeight: '60vh' }}

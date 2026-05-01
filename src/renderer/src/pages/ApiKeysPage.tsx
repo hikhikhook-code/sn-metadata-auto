@@ -74,6 +74,10 @@ export function ApiKeysPage() {
   async function checkKey(id: string) {
     const k = useAppStore.getState().apiKeys.find((x) => x.id === id)
     if (!k) return
+    if (!k.provider) {
+      showToast('warning', 'Pick a provider before checking this key')
+      return
+    }
     setBusy((b) => new Set(b).add(id))
     try {
       const res = await window.api.ai.checkKey({
@@ -113,6 +117,10 @@ export function ApiKeysPage() {
   async function fetchModels(id: string) {
     const k = useAppStore.getState().apiKeys.find((x) => x.id === id)
     if (!k) return
+    if (!k.provider) {
+      showToast('warning', 'Pick a provider before fetching models')
+      return
+    }
     setBusy((b) => new Set(b).add(id))
     try {
       const res = await window.api.ai.fetchModels({
@@ -148,6 +156,7 @@ export function ApiKeysPage() {
   }
 
   function modelOptions(k: ApiKeyEntry): ModelPreset[] {
+    if (!k.provider) return []
     const presets = PRESET_MODELS[k.provider] ?? []
     if (k.fetchedModels && k.fetchedModels.length > 0) {
       const seen = new Set(presets.map((p) => p.id))
@@ -257,11 +266,12 @@ export function ApiKeysPage() {
 
                   <div className="field" style={{ gap: 4 }}>
                     <span className="label" style={{ marginBottom: 0 }}>
-                      Key Name <InfoIcon content="Display name shown in logs and the top bar." />
+                      Key Label <InfoIcon content="Display name shown in logs and the top bar." />
                     </span>
                     <input
                       className="input"
                       value={k.name}
+                      placeholder="Name this key"
                       onChange={(e) => updateApiKey(k.id, { name: e.target.value })}
                     />
                   </div>
@@ -274,11 +284,22 @@ export function ApiKeysPage() {
                       className="select"
                       value={k.provider}
                       onChange={(e) => {
-                        const provider = e.target.value as ApiProvider
-                        const first = PRESET_MODELS[provider]?.[0]?.id ?? ''
-                        updateApiKey(k.id, { provider, model: first, status: 'Untested' })
+                        const next = e.target.value
+                        if (next === '') {
+                          updateApiKey(k.id, { provider: '', model: '', status: 'Untested' })
+                          return
+                        }
+                        const provider = next as ApiProvider
+                        // Don't auto-select a model — the user has to pick one
+                        // explicitly so they see the model list and can choose
+                        // a vision-capable model on purpose. The Model field
+                        // shows a "Select model" placeholder until then.
+                        updateApiKey(k.id, { provider, model: '', status: 'Untested' })
                       }}
                     >
+                      <option value="" disabled={k.provider !== ''}>
+                        Select provider
+                      </option>
                       {PROVIDERS.map((p) => (
                         <option key={p} value={p}>
                           {p}
@@ -292,33 +313,52 @@ export function ApiKeysPage() {
                       Model{' '}
                       <InfoIcon content="Pick a recommended preset or paste a custom Model ID. Use Fetch Models to load the live list from the provider." />
                     </span>
-                    <select
-                      className="select"
-                      value={presets.some((p) => p.id === k.model) ? k.model : '__custom__'}
-                      onChange={(e) => {
-                        if (e.target.value === '__custom__') return
-                        updateApiKey(k.id, { model: e.target.value })
-                      }}
-                    >
-                      {presets.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.label} · {m.category}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom Model ID…</option>
-                    </select>
-                    <input
-                      className="input"
-                      style={{ marginTop: 4 }}
-                      placeholder="Custom Model ID (overrides selection if set)"
-                      value={presets.some((p) => p.id === k.model) ? '' : k.model}
-                      onChange={(e) => updateApiKey(k.id, { model: e.target.value })}
-                    />
-                    {visionWarn && (
-                      <span style={{ fontSize: 11, color: 'var(--c-warning)', marginTop: 4 }}>
-                        ⚠ This model may not support image / visual analysis. Metadata quality may
-                        be limited.
-                      </span>
+                    {k.provider === '' ? (
+                      <select className="select" value="" disabled>
+                        <option value="">Select provider first</option>
+                      </select>
+                    ) : (
+                      <>
+                        <select
+                          className="select"
+                          value={
+                            k.model === ''
+                              ? ''
+                              : presets.some((p) => p.id === k.model)
+                                ? k.model
+                                : '__custom__'
+                          }
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') return
+                            updateApiKey(k.id, { model: e.target.value })
+                          }}
+                        >
+                          <option value="" disabled={k.model !== ''}>
+                            Select model
+                          </option>
+                          {presets.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label} · {m.category}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom Model ID…</option>
+                        </select>
+                        <input
+                          className="input"
+                          style={{ marginTop: 4 }}
+                          placeholder="Custom Model ID (overrides selection if set)"
+                          value={
+                            k.model === '' || presets.some((p) => p.id === k.model) ? '' : k.model
+                          }
+                          onChange={(e) => updateApiKey(k.id, { model: e.target.value })}
+                        />
+                        {visionWarn && (
+                          <span style={{ fontSize: 11, color: 'var(--c-warning)', marginTop: 4 }}>
+                            ⚠ This model may not support image / visual analysis. Metadata quality
+                            may be limited.
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -382,7 +422,7 @@ export function ApiKeysPage() {
                     <Tooltip content="Validate this key">
                       <button
                         className="btn btn-sm"
-                        disabled={isBusy || !k.apiKey}
+                        disabled={isBusy || !k.apiKey || !k.provider}
                         onClick={() => void checkKey(k.id)}
                       >
                         {isBusy ? (
@@ -396,7 +436,7 @@ export function ApiKeysPage() {
                     <Tooltip content="Fetch the live model list from this provider.">
                       <button
                         className="btn btn-sm"
-                        disabled={isBusy || !k.apiKey}
+                        disabled={isBusy || !k.apiKey || !k.provider}
                         onClick={() => void fetchModels(k.id)}
                       >
                         <RefreshCcw size={13} /> Fetch Models
@@ -415,7 +455,8 @@ export function ApiKeysPage() {
                       <button
                         className="btn btn-sm btn-ghost"
                         onClick={() => {
-                          if (confirm(`Remove ${k.name}?`)) removeApiKey(k.id)
+                          const label = k.name || `API Key ${k.priority}`
+                          if (confirm(`Remove ${label}?`)) removeApiKey(k.id)
                         }}
                         style={{ color: 'var(--c-danger)' }}
                       >

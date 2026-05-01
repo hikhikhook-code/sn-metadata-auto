@@ -4,7 +4,6 @@ import { nanoid } from 'nanoid'
 import type {
   AppFile,
   ApiKeyEntry,
-  ApiProvider,
   AppSettings,
   BatchState,
   FileStatus,
@@ -167,7 +166,8 @@ export interface AppState {
 }
 
 function activeKeySlot(key: ApiKeyEntry): string {
-  return `${key.provider} Key ${key.priority}`
+  const providerLabel = key.provider || 'Unconfigured'
+  return `${providerLabel} Key ${key.priority}`
 }
 
 export const useAppStore = create<AppState>()(
@@ -407,13 +407,12 @@ export const useAppStore = create<AppState>()(
       if (state.apiKeys.length >= MAX_API_KEYS) return null
       const id = nanoid(8)
       set((s) => {
-        const provider: ApiProvider = 'Gemini'
         const priority = s.apiKeys.length + 1
         s.apiKeys.push({
           id,
-          name: `${provider} Key ${priority}`,
-          provider,
-          model: 'gemini-2.5-flash',
+          name: '',
+          provider: '',
+          model: '',
           apiKey: '',
           priority,
           status: 'Untested',
