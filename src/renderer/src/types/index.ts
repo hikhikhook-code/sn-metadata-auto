@@ -169,15 +169,34 @@ export interface AppSettings {
   settingsMode: SettingsMode
   defaultKeywordCount: number
   platformPreset: 'Adobe Stock' | 'Freepik' | 'Shutterstock' | 'Pond5' | 'Custom'
+  /**
+   * User-defined CSV schema used when `platformPreset === 'Custom'`. We
+   * persist the columns and delimiter so that the Custom mode survives
+   * project save/load cycles. This is the only place the renderer keeps a
+   * mutable copy of a schema; built-in platforms read from the static
+   * registry in `services/csvSchema.ts`.
+   */
+  customCsvSchema: {
+    columns: Array<{
+      header: string
+      source:
+        | 'filename'
+        | 'originalFilename'
+        | 'newFilename'
+        | 'title'
+        | 'description'
+        | 'keywords'
+        | 'category'
+        | 'adobeCategory'
+        | 'fileType'
+        | 'status'
+        | 'apiProvider'
+        | 'empty'
+    }>
+    delimiter: ',' | ';' | '\t'
+  }
   autoRenameAfterApprove: boolean
   autoRenameAfterSuccess: boolean
-  /**
-   * When true, Approve also writes the AI-generated metadata into the source
-   * file (XMP/IPTC/EXIF) before any rename happens. Default true so daily
-   * users get a complete, ready-to-upload file from a single Approve click
-   * without needing to remember to visit the Export → Embed flow.
-   */
-  autoEmbedAfterApprove: boolean
   keepOriginalBackup: boolean
   useTitleCase: boolean
   useLowercaseFilename: boolean

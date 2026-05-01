@@ -116,9 +116,21 @@ async function ensureBackup(filePath: string): Promise<void> {
 
 async function prepareTarget(file: EmbedFileInput, req: EmbedRequest): Promise<string> {
   if (req.mode === 'copy') {
-    const dir = path.dirname(file.filePath)
-    const subdir = req.outputDirName && req.outputDirName.length > 0 ? req.outputDirName : 'embedded'
-    const outDir = path.join(dir, subdir)
+    // outputDirName can be either:
+    //   - a bare folder name (e.g. "embedded") → treated as a subdirectory
+    //     of the source file's directory. This is the legacy behavior the
+    //     Export page used to default to.
+    //   - an absolute path (e.g. "D:\\stock-output" or "/home/user/output")
+    //     → treated as the literal destination folder. This is what the
+    //     renderer now passes when settings.outputFolder is configured, so
+    //     the user's global Output Folder choice flows through to Quick
+    //     Export instead of every export ending up under
+    //     <sourceDir>/embedded/.
+    const requested =
+      req.outputDirName && req.outputDirName.length > 0 ? req.outputDirName : 'embedded'
+    const outDir = path.isAbsolute(requested)
+      ? requested
+      : path.join(path.dirname(file.filePath), requested)
     await fs.mkdir(outDir, { recursive: true })
     const basename =
       file.outputBasename && file.outputBasename.length > 0

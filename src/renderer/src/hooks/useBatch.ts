@@ -407,55 +407,54 @@ export function useRename() {
       .getState()
       .addLog('success', 'APPROVED', `Approved ${file.originalFilename}`, { fileId })
 
-    // Auto-embed: write metadata directly into the source file before any
-    // rename/move happens. We use in-place mode so the file stays at its
-    // current path; the subsequent rename step (if enabled) handles moving
-    // it to the output folder. We pass `backup: false` here because the
-    // rename step below already takes a `_originals/` snapshot when
-    // keepOriginalBackup is on, and we don't want a duplicate `.bak`
-    // sidecar from the embed flow polluting the source folder.
-    if (settings.autoEmbedAfterApprove) {
-      try {
-        const embedRes = await window.api.metadata.embed({
-          files: [
-            {
-              filePath: file.currentPath,
-              fileType: String(file.fileType),
-              metadata: {
-                title: meta.title,
-                description: meta.description,
-                keywords: meta.keywords
-              }
+    // Auto-embed (always on, no toggle): write metadata directly into the
+    // source file before any rename/move happens. We use in-place mode so
+    // the file stays at its current path; the subsequent rename step (if
+    // enabled) handles moving it to the output folder. We pass
+    // `backup: false` here because the rename step below already takes a
+    // `_originals/` snapshot when keepOriginalBackup is on, and we don't
+    // want a duplicate `.bak` sidecar from the embed flow polluting the
+    // source folder.
+    try {
+      const embedRes = await window.api.metadata.embed({
+        files: [
+          {
+            filePath: file.currentPath,
+            fileType: String(file.fileType),
+            metadata: {
+              title: meta.title,
+              description: meta.description,
+              keywords: meta.keywords
             }
-          ],
-          mode: 'in-place',
-          backup: false
-        })
-        const detail = embedRes.results?.[0]
-        if (!embedRes.ok || !detail?.ok) {
-          const reason = detail?.error ?? 'unknown error'
-          useAppStore
-            .getState()
-            .addLog('error', 'EMBED', `Embed failed for ${file.originalFilename}: ${reason}`, {
-              fileId
-            })
-          useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
-        } else {
-          useAppStore
-            .getState()
-            .addLog('success', 'EMBED', `Embedded metadata into ${file.originalFilename}`, {
-              fileId
-            })
-        }
-      } catch (err) {
-        const reason = (err as Error).message
+          }
+        ],
+        mode: 'in-place',
+        backup: false
+      })
+      const detail = embedRes.results?.[0]
+      if (!embedRes.ok || !detail?.ok) {
+        const reason = detail?.error ?? 'unknown error'
         useAppStore
           .getState()
-          .addLog('error', 'EMBED', `Embed crashed for ${file.originalFilename}: ${reason}`, {
+          .addLog('error', 'EMBED', `Embed failed for ${file.originalFilename}: ${reason}`, {
             fileId
           })
         useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
+      } else {
+        useAppStore
+          .getState()
+          .addLog('success', 'EMBED', `Embedded metadata into ${file.originalFilename}`, {
+            fileId
+          })
       }
+    } catch (err) {
+      const reason = (err as Error).message
+      useAppStore
+        .getState()
+        .addLog('error', 'EMBED', `Embed crashed for ${file.originalFilename}: ${reason}`, {
+          fileId
+        })
+      useAppStore.getState().showToast('error', `Embed failed: ${reason}`)
     }
 
     if (!settings.autoRenameAfterApprove) {

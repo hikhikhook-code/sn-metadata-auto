@@ -33,6 +33,14 @@ export interface ExportPayload {
   format: 'csv' | 'txt' | 'json' | 'xlsx'
   rows: Record<string, unknown>[]
   defaultName: string
+  /** CSV-only: cell delimiter. Defaults to `,` in the IPC handler. */
+  delimiter?: ',' | ';' | '\t'
+  /**
+   * Optional explicit ordered header row. If provided, both CSV and XLSX
+   * use these labels in this order; otherwise headers are derived from the
+   * first row's keys (legacy behavior).
+   */
+  headers?: string[]
 }
 
 const api = {
