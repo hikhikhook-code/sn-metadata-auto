@@ -127,10 +127,6 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
 
       <Card title="File Behavior">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <ToggleField
-            fieldKey="autoEmbedAfterApprove"
-            label="Auto-embed metadata after Approve"
-          />
           <ToggleField fieldKey="autoRenameAfterApprove" label="Auto rename after Approve" />
           <ToggleField fieldKey="keepOriginalBackup" label="Keep original backup" />
         </div>
@@ -261,7 +257,6 @@ function ToggleField({
   fieldKey:
     | 'autoRenameAfterApprove'
     | 'autoRenameAfterSuccess'
-    | 'autoEmbedAfterApprove'
     | 'keepOriginalBackup'
     | 'useTitleCase'
     | 'useLowercaseFilename'

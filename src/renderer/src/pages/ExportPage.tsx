@@ -49,13 +49,22 @@ export function ExportPage() {
   const selected = useAppStore((s) => s.selectedFileIds)
   const showToast = useAppStore((s) => s.showToast)
   const addLog = useAppStore((s) => s.addLog)
+  // settings.outputFolder is the global "send finished files here" path the
+  // user picks in Settings → Rename Rules. When set we want both the
+  // Approve flow (handled in useBatch) AND the manual Quick Export → Embed
+  // flow to write to that folder instead of dropping a sibling "embedded/"
+  // subdirectory next to every source file. Pre-fill the folder input with
+  // the global path so daily users don't have to retype it on every export.
+  const settingsOutputFolder = useAppStore((s) => s.settings.outputFolder)
 
   const [scope, setScope] = useState<Scope>('all')
   const [format, setFormat] = useState<'csv' | 'txt' | 'json' | 'xlsx'>('csv')
   const [showPreview, setShowPreview] = useState(false)
   const [embedMode, setEmbedMode] = useState<EmbedMode>('copy')
   const [embedBackup, setEmbedBackup] = useState(true)
-  const [embedFolder, setEmbedFolder] = useState('embedded')
+  const [embedFolder, setEmbedFolder] = useState<string>(
+    () => settingsOutputFolder?.trim() || 'embedded'
+  )
   const [embedRenameToTitle, setEmbedRenameToTitle] = useState(true)
   const [embedBusy, setEmbedBusy] = useState(false)
 
@@ -370,8 +379,17 @@ export function ExportPage() {
 
         {embedMode === 'copy' ? (
           <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
-            Each file is copied to <code>&lt;originalDir&gt;/{embedFolder || 'embedded'}/</code>{' '}
-            before metadata is written. Original files stay untouched.
+            {/^([a-zA-Z]:[\\/]|\/)/.test(embedFolder) ? (
+              <>
+                Each file is copied to <code>{embedFolder}</code> before metadata is written.
+                Original files stay untouched.
+              </>
+            ) : (
+              <>
+                Each file is copied to <code>&lt;originalDir&gt;/{embedFolder || 'embedded'}/</code>{' '}
+                before metadata is written. Original files stay untouched.
+              </>
+            )}
             {embedRenameToTitle
               ? ' Output filenames use the rename preview from the Editor (or the original name if no preview is set).'
               : ' Output filenames keep the original name.'}
