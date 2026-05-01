@@ -49,9 +49,16 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
     opacity: isDragging ? 0.6 : 1
   }
 
+  // Spread sortable listeners on the entire chip so users can drag from
+  // anywhere on it, not just the grip dots. The grip stays as a visual hint.
+  // Buttons / input inside the chip stop propagation on pointer-down so a
+  // click on Edit/Remove or focusing the input doesn't kick off a drag.
+  const dragHandleProps = readOnly ? {} : { ...attributes, ...listeners }
+
   return (
     <div
       ref={setNodeRef}
+      {...dragHandleProps}
       style={{
         ...style,
         display: 'inline-flex',
@@ -68,16 +75,16 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
         fontSize: 12,
         fontWeight: 500,
         color: 'var(--c-text)',
-        cursor: readOnly ? 'default' : 'grab',
-        userSelect: 'none'
+        cursor: readOnly ? 'default' : isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none',
+        touchAction: readOnly ? undefined : 'none'
       }}
     >
       {!readOnly && (
         <span
-          {...attributes}
-          {...listeners}
+          aria-hidden="true"
           style={{ display: 'inline-flex', color: 'var(--c-text-muted)' }}
-          title="Drag to reorder"
+          title="Drag anywhere on the chip to reorder"
         >
           <GripHorizontal size={12} />
         </span>
@@ -103,6 +110,7 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
           autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
           onBlur={() => {
             setEditing(false)
             const v = normalizeKeyword(draft)
@@ -135,6 +143,7 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
       {!readOnly && !editing && (
         <button
           className="btn-icon"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={() => setEditing(true)}
           style={{ padding: 2, color: 'var(--c-text-muted)' }}
           aria-label="Edit"
@@ -145,6 +154,7 @@ function SortableChip({ id, index, value, highlight, onRemove, onEdit, readOnly 
       {!readOnly && (
         <button
           className="btn-icon"
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onRemove}
           style={{ padding: 2, color: 'var(--c-text-muted)' }}
           aria-label="Remove"

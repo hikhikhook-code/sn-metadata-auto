@@ -1,6 +1,8 @@
 import { app, shell, BrowserWindow, protocol } from 'electron'
 import { join, extname } from 'path'
-import { promises as fs } from 'fs'
+import { createReadStream } from 'fs'
+import { stat } from 'fs/promises'
+import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerFileIpc } from './ipc/files'
@@ -34,7 +36,11 @@ const PREVIEW_MIME_BY_EXT: Record<string, string> = {
   webp: 'image/webp',
   gif: 'image/gif',
   bmp: 'image/bmp',
-  svg: 'image/svg+xml'
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  webm: 'video/webm'
 }
 
 function createWindow(): void {
@@ -79,6 +85,12 @@ app.whenReady().then(() => {
   // We read the file directly via fs so behavior is identical across dev /
   // production / Windows / Linux without depending on Electron's file://
   // URL handling under the privileged scheme.
+  //
+  // Range requests are honored so that a <video> element pointed at this
+  // protocol can fetch just the moov atom + the bytes around its current
+  // seek position rather than downloading the whole file. Without this, a
+  // 200MB MP4 would have to fully buffer before we could capture a poster
+  // frame in the renderer.
   protocol.handle('snfile', async (request) => {
     try {
       const url = new URL(request.url)
@@ -87,11 +99,44 @@ app.whenReady().then(() => {
       // After stripping the leading slashes we have a Windows path with a
       // drive letter, or a POSIX path that needs its leading slash restored.
       if (process.platform !== 'win32') raw = '/' + raw
-      const data = await fs.readFile(raw)
       const ext = extname(raw).slice(1).toLowerCase()
       const mime = PREVIEW_MIME_BY_EXT[ext] ?? 'application/octet-stream'
-      return new Response(new Uint8Array(data), {
-        headers: { 'content-type': mime, 'cache-control': 'no-cache' }
+
+      const stats = await stat(raw)
+      const total = stats.size
+      const rangeHeader = request.headers.get('range')
+      const m = rangeHeader ? /^bytes=(\d+)-(\d*)$/.exec(rangeHeader.trim()) : null
+
+      if (m) {
+        const start = parseInt(m[1], 10)
+        const end = m[2] && m[2].length > 0 ? Math.min(parseInt(m[2], 10), total - 1) : total - 1
+        if (Number.isNaN(start) || start >= total || start > end) {
+          return new Response('Range not satisfiable', {
+            status: 416,
+            headers: { 'content-range': `bytes */${total}` }
+          })
+        }
+        const stream = createReadStream(raw, { start, end })
+        return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
+          status: 206,
+          headers: {
+            'content-type': mime,
+            'content-length': String(end - start + 1),
+            'content-range': `bytes ${start}-${end}/${total}`,
+            'accept-ranges': 'bytes',
+            'cache-control': 'no-cache'
+          }
+        })
+      }
+
+      const stream = createReadStream(raw)
+      return new Response(Readable.toWeb(stream) as unknown as ReadableStream, {
+        headers: {
+          'content-type': mime,
+          'content-length': String(total),
+          'accept-ranges': 'bytes',
+          'cache-control': 'no-cache'
+        }
       })
     } catch (err) {
       console.error('snfile preview fetch failed:', err)
