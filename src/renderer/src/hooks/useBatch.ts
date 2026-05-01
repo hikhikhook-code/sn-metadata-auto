@@ -3,6 +3,7 @@ import { useAppStore } from '@renderer/store/store'
 import { generateForFile, resetKeyGate } from '@renderer/services/ai/orchestrator'
 import type { AppFile, AppSettings, BatchWorkerSlot } from '@renderer/types'
 import type { GenerateOutcome, KeyStatusChange } from '@renderer/services/ai/orchestrator'
+import { titleStatus } from '@renderer/utils/title'
 
 const STOP_SENTINEL = { __stopped: true }
 
@@ -353,8 +354,13 @@ export function useRename() {
     const file = useAppStore.getState().files.find((f) => f.id === fileId)
     if (!file) return
     const meta = file.editedMetadata ?? file.aiMetadata
-    if (!meta || !meta.title.trim()) {
-      useAppStore.getState().showToast('warning', 'Cannot rename — title is empty')
+    const status = titleStatus(meta?.title ?? '')
+    if (!meta || status.state === 'empty') {
+      useAppStore.getState().showToast('warning', 'Cannot rename — title is required')
+      return
+    }
+    if (status.state === 'tooLong') {
+      useAppStore.getState().showToast('warning', `Cannot rename — ${status.message.toLowerCase()}`)
       return
     }
     const settings = useAppStore.getState().settings

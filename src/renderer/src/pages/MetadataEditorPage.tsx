@@ -7,8 +7,9 @@ import { KeywordChipList } from '@renderer/components/keywords/KeywordChipList'
 import { CATEGORIES } from '@renderer/utils/categories'
 import { formatDateTime } from '@renderer/utils/format'
 import { KEYWORD_COUNT_PRESETS } from '@renderer/utils/keywordCount'
-import { Save, RefreshCcw, FileEdit, Sparkles, RotateCcw } from 'lucide-react'
+import { Save, RefreshCcw, FileEdit, Sparkles, RotateCcw, Undo2 } from 'lucide-react'
 import { useBatchControls, useRename } from '@renderer/hooks/useBatch'
+import { TITLE_RECOMMENDED_MAX, titleStatus } from '@renderer/utils/title'
 
 type Tab = 'main' | 'keywords' | 'rename'
 
@@ -175,14 +176,75 @@ export function MetadataEditorPage() {
                   </div>
 
                   <div className="field">
-                    <span className="label">
-                      Title <InfoIcon content="Microstock-friendly title under 70 chars." />
-                    </span>
-                    <input
-                      className="input"
-                      value={meta.title}
-                      onChange={(e) => updateEdited(file.id, { title: e.target.value })}
-                    />
+                    <div className="label-row">
+                      <span className="label">
+                        Title{' '}
+                        <InfoIcon content="Concise, descriptive title under 70 chars. Used as filename after Approve & Rename." />
+                      </span>
+                      {(() => {
+                        const ts = titleStatus(meta.title)
+                        return (
+                          <span
+                            className={
+                              ts.state === 'empty' || ts.state === 'tooLong'
+                                ? 'title-counter title-counter--err'
+                                : ts.state === 'warn'
+                                  ? 'title-counter title-counter--warn'
+                                  : 'title-counter'
+                            }
+                            style={{ fontSize: 11 }}
+                          >
+                            {ts.count}/{TITLE_RECOMMENDED_MAX}
+                          </span>
+                        )
+                      })()}
+                    </div>
+                    {(() => {
+                      const ts = titleStatus(meta.title)
+                      return (
+                        <>
+                          <input
+                            className={`input ${
+                              ts.state === 'empty' || ts.state === 'tooLong'
+                                ? 'input--error'
+                                : ts.state === 'warn'
+                                  ? 'input--warn'
+                                  : ''
+                            }`}
+                            value={meta.title}
+                            maxLength={200}
+                            onChange={(e) => updateEdited(file.id, { title: e.target.value })}
+                          />
+                          {ts.message && (
+                            <div
+                              className={`field-helper ${
+                                ts.state === 'empty' || ts.state === 'tooLong'
+                                  ? 'field-helper--error'
+                                  : 'field-helper--warn'
+                              }`}
+                            >
+                              {ts.message}
+                            </div>
+                          )}
+                          {meta.titleOriginal && meta.titleOriginal !== meta.title && (
+                            <div className="row" style={{ gap: 6, marginTop: 4, fontSize: 11 }}>
+                              <span className="text-muted">
+                                AI suggested a shorter title. Original ({meta.titleOriginal.length}{' '}
+                                chars):
+                              </span>
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                onClick={() =>
+                                  updateEdited(file.id, { title: meta.titleOriginal! })
+                                }
+                              >
+                                <Undo2 size={12} /> Use original
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                   <div className="field">
                     <span className="label">
@@ -228,15 +290,27 @@ export function MetadataEditorPage() {
                     <button className="btn btn-warning" onClick={() => void regenerateOne(file.id)}>
                       <RefreshCcw size={14} /> Regenerate This File
                     </button>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        saveMetadata(file.id)
-                        showToast('success', 'Saved')
-                      }}
-                    >
-                      <Save size={14} /> Save Changes
-                    </button>
+                    {(() => {
+                      const ts = titleStatus(meta.title)
+                      const disabled = ts.state === 'empty' || ts.state === 'tooLong'
+                      return (
+                        <button
+                          className="btn btn-primary"
+                          disabled={disabled}
+                          title={disabled ? ts.message : 'Save edited metadata'}
+                          onClick={() => {
+                            const ok = saveMetadata(file.id)
+                            if (ok) {
+                              showToast('success', 'Saved')
+                            } else {
+                              showToast('error', 'Cannot save — fix the title first')
+                            }
+                          }}
+                        >
+                          <Save size={14} /> Save Changes
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -273,15 +347,31 @@ export function MetadataEditorPage() {
                     onChange={(next) => updateEdited(file.id, { keywords: next })}
                   />
                   <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => {
-                        saveMetadata(file.id)
-                        showToast('success', 'Keyword order saved')
-                      }}
-                    >
-                      <Save size={14} /> Save Keyword Order
-                    </button>
+                    {(() => {
+                      const ts = titleStatus(meta.title)
+                      const disabled = ts.state === 'empty' || ts.state === 'tooLong'
+                      return (
+                        <button
+                          className="btn btn-primary"
+                          disabled={disabled}
+                          title={
+                            disabled
+                              ? `Cannot save — ${ts.message.toLowerCase()}`
+                              : 'Save the current keyword order'
+                          }
+                          onClick={() => {
+                            const ok = saveMetadata(file.id)
+                            if (ok) {
+                              showToast('success', 'Keyword order saved')
+                            } else {
+                              showToast('error', 'Cannot save — fix the title first')
+                            }
+                          }}
+                        >
+                          <Save size={14} /> Save Keyword Order
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -332,9 +422,20 @@ export function MetadataEditorPage() {
                     </label>
                   </div>
                   <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn btn-success" onClick={() => void rename(file.id)}>
-                      Rename Now
-                    </button>
+                    {(() => {
+                      const ts = titleStatus(meta.title)
+                      const disabled = ts.state === 'empty' || ts.state === 'tooLong'
+                      return (
+                        <button
+                          className="btn btn-success"
+                          disabled={disabled}
+                          title={disabled ? ts.message : 'Approve and rename file on disk'}
+                          onClick={() => void rename(file.id)}
+                        >
+                          Rename Now
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )}

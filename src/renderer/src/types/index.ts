@@ -48,6 +48,12 @@ export interface Metadata {
   description: string
   keywords: string[]
   category: string
+  /**
+   * The unmodified AI-returned title, kept only when the AI produced a title
+   * longer than the recommended length and we substituted a shortened version
+   * for the editable field. Lets the user revert to the original via the UI.
+   */
+  titleOriginal?: string
 }
 
 export interface AppFile {
