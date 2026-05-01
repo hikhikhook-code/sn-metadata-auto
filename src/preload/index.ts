@@ -97,6 +97,7 @@ const api = {
       files: Array<{
         filePath: string
         fileType: string
+        outputBasename?: string
         metadata: { title?: string; description?: string; keywords?: string[] }
       }>
       mode: 'in-place' | 'copy'

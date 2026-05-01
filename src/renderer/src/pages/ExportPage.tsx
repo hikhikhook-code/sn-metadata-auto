@@ -56,6 +56,7 @@ export function ExportPage() {
   const [embedMode, setEmbedMode] = useState<EmbedMode>('copy')
   const [embedBackup, setEmbedBackup] = useState(true)
   const [embedFolder, setEmbedFolder] = useState('embedded')
+  const [embedRenameToTitle, setEmbedRenameToTitle] = useState(true)
   const [embedBusy, setEmbedBusy] = useState(false)
 
   const { rows, validFiles, dropped, longTitleCount } = useMemo(() => {
@@ -105,9 +106,16 @@ export function ExportPage() {
     try {
       const payload = embedTargets.map((f) => {
         const m = f.editedMetadata ?? f.aiMetadata
+        const renamed = (f.renamePreview ?? '').trim()
+        const useRename =
+          embedMode === 'copy' &&
+          embedRenameToTitle &&
+          renamed.length > 0 &&
+          renamed !== f.currentFilename
         return {
           filePath: f.currentPath,
           fileType: String(f.fileType).toLowerCase(),
+          outputBasename: useRename ? renamed : undefined,
           metadata: {
             title: m?.title,
             description: m?.description,
@@ -340,10 +348,33 @@ export function ExportPage() {
           )}
         </div>
 
+        {embedMode === 'copy' && (
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              alignSelf: 'flex-start'
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={embedRenameToTitle}
+              onChange={(e) => setEmbedRenameToTitle(e.target.checked)}
+              disabled={embedBusy}
+            />
+            Rename output to AI title (uses each file&apos;s rename preview)
+          </label>
+        )}
+
         {embedMode === 'copy' ? (
           <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>
             Each file is copied to <code>&lt;originalDir&gt;/{embedFolder || 'embedded'}/</code>{' '}
             before metadata is written. Original files stay untouched.
+            {embedRenameToTitle
+              ? ' Output filenames use the rename preview from the Editor (or the original name if no preview is set).'
+              : ' Output filenames keep the original name.'}
           </p>
         ) : (
           <p className="text-muted" style={{ fontSize: 12, margin: 0 }}>

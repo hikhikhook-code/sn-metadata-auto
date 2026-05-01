@@ -11,6 +11,12 @@ import { ExifTool, type WriteTags } from 'exiftool-vendored'
 export interface EmbedFileInput {
   filePath: string
   fileType: string
+  /**
+   * Optional override for the output filename in `copy` mode. When set, the
+   * output file in the embedded subdirectory uses this basename instead of
+   * the original filename. Ignored in `in-place` mode (which never renames).
+   */
+  outputBasename?: string
   metadata: {
     title?: string
     description?: string
@@ -114,7 +120,11 @@ async function prepareTarget(file: EmbedFileInput, req: EmbedRequest): Promise<s
     const subdir = req.outputDirName && req.outputDirName.length > 0 ? req.outputDirName : 'embedded'
     const outDir = path.join(dir, subdir)
     await fs.mkdir(outDir, { recursive: true })
-    const target = path.join(outDir, path.basename(file.filePath))
+    const basename =
+      file.outputBasename && file.outputBasename.length > 0
+        ? file.outputBasename
+        : path.basename(file.filePath)
+    const target = path.join(outDir, basename)
     await fs.copyFile(file.filePath, target)
     return target
   }
