@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
 import { useAppStore, MAX_API_KEYS } from '@renderer/store/store'
 import { PRESET_MODELS } from '@renderer/services/models'
 import { InfoIcon, Tooltip } from '@renderer/components/ui/Tooltip'
@@ -14,7 +14,9 @@ import {
   Power,
   ChevronUp,
   ChevronDown,
-  KeyRound
+  KeyRound,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react'
 import type { ApiKeyEntry, ApiProvider, ModelPreset } from '@renderer/types'
 import { formatDateTime, maskApiKey } from '@renderer/utils/format'
@@ -42,6 +44,25 @@ export function ApiKeysPage() {
 
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<Set<string>>(new Set())
+  const [encryptionStatus, setEncryptionStatus] = useState<{
+    available: boolean
+    backend: string
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.api.crypto
+      .encryptionStatus()
+      .then((s) => {
+        if (!cancelled) setEncryptionStatus(s)
+      })
+      .catch(() => {
+        if (!cancelled) setEncryptionStatus({ available: false, backend: 'unsupported' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function toggleReveal(id: string) {
     const next = new Set(revealed)
@@ -144,6 +165,7 @@ export function ApiKeysPage() {
             Up to {MAX_API_KEYS} keys across Gemini, OpenAI, Groq, and Custom (OpenAI-compatible).
             Lower priority numbers are tried first; the next key takes over on rate limit / error.
           </p>
+          <EncryptionStatusPill status={encryptionStatus} />
         </div>
         <div className="row">
           <Tooltip content="Validate every enabled key">
@@ -419,5 +441,91 @@ export function ApiKeysPage() {
         sent to logs and are masked in the UI by default.
       </div>
     </div>
+  )
+}
+
+function backendLabel(backend: string): string {
+  switch (backend) {
+    case 'dpapi':
+      return 'Windows DPAPI'
+    case 'keychain':
+      return 'macOS Keychain'
+    case 'gnome_libsecret':
+      return 'libsecret (GNOME)'
+    case 'kwallet':
+    case 'kwallet5':
+    case 'kwallet6':
+      return 'KWallet (KDE)'
+    case 'libsecret':
+      return 'libsecret'
+    case 'basic_text':
+      return 'basic text (no system keychain)'
+    case 'unsupported':
+      return 'no keychain available'
+    case 'unknown':
+      return 'unknown backend'
+    default:
+      return backend
+  }
+}
+
+function EncryptionStatusPill({
+  status
+}: {
+  status: { available: boolean; backend: string } | null
+}): ReactElement | null {
+  if (status === null) return null
+  const label = backendLabel(status.backend)
+  // `basic_text` is reported when isEncryptionAvailable() returns true but the
+  // OS has no real keychain (e.g. Linux with --password-store=basic). Treat it
+  // as not-actually-encrypted so the user knows their keys are essentially
+  // plaintext on disk.
+  const trulyEncrypted = status.available && status.backend !== 'basic_text'
+  const baseStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '4px 10px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 500,
+    marginTop: 8,
+    border: '1px solid'
+  }
+  if (trulyEncrypted) {
+    return (
+      <Tooltip
+        content={`API keys are encrypted at rest using ${label}. Saved project files store encrypted blobs (enc:v1:…) instead of plaintext keys.`}
+      >
+        <span
+          style={{
+            ...baseStyle,
+            background: 'rgba(216,239,216,0.7)',
+            color: '#2d6a3a',
+            borderColor: 'rgba(45,106,58,0.25)'
+          }}
+        >
+          <ShieldCheck size={13} />
+          Encrypted at rest · {label}
+        </span>
+      </Tooltip>
+    )
+  }
+  return (
+    <Tooltip
+      content={`safeStorage reports ${label}. API keys will be saved to disk as plaintext until a system keychain is configured (DPAPI on Windows, Keychain on macOS, libsecret on Linux).`}
+    >
+      <span
+        style={{
+          ...baseStyle,
+          background: 'rgba(251,233,200,0.85)',
+          color: '#8a5a1a',
+          borderColor: 'rgba(138,90,26,0.25)'
+        }}
+      >
+        <ShieldAlert size={13} />
+        Saved as plaintext · {label}
+      </span>
+    </Tooltip>
   )
 }
