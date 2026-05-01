@@ -43,7 +43,16 @@ export interface ExportPayload {
   headers?: string[]
 }
 
+// process.platform is one of: 'aix' | 'darwin' | 'freebsd' | 'linux' | 'openbsd'
+// | 'sunos' | 'win32'. We narrow the type at the call site where we only care
+// about darwin vs. everything else.
+const platform: NodeJS.Platform = process.platform
+
 const api = {
+  /** Snapshot of `process.platform` from the main side. Used by the renderer
+   * to make platform-specific UI decisions (e.g. hiding our custom window
+   * controls on macOS, which already shows native traffic-light buttons). */
+  platform,
   selectFiles: (): Promise<SelectedFile[]> => ipcRenderer.invoke('files:select'),
   selectFolder: (): Promise<SelectedFile[]> => ipcRenderer.invoke('files:select-folder'),
   statFiles: (paths: string[]): Promise<SelectedFile[]> => ipcRenderer.invoke('files:stat', paths),
