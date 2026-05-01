@@ -15,6 +15,7 @@ const CATEGORIES: ('All' | LogCategory)[] = [
   'APPROVED',
   'RENAMED',
   'EXPORT',
+  'EMBED',
   'API',
   'PROJECT',
   'STOP',

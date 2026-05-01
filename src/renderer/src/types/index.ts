@@ -133,6 +133,7 @@ export type LogCategory =
   | 'APPROVED'
   | 'RENAMED'
   | 'EXPORT'
+  | 'EMBED'
   | 'API'
   | 'PROJECT'
   | 'STOP'
