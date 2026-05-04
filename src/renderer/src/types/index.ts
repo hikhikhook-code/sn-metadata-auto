@@ -79,7 +79,7 @@ export interface AppFile {
   exportedAt?: string
 }
 
-export type ApiProvider = 'Gemini' | 'OpenAI' | 'Groq' | 'Custom'
+export type ApiProvider = 'Gemini' | 'OpenAI' | 'Groq' | 'KoboiLLM' | 'Custom'
 
 export type ApiKeyStatus = 'Untested' | 'Valid' | 'Invalid' | 'Limit' | 'Error' | 'Disabled'
 

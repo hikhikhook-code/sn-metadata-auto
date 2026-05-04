@@ -326,6 +326,35 @@ async function groqGenerate(
   return openaiGenerate({ ...input, baseUrl: groqBase(input) })
 }
 
+// ---------- KoboiLLM ----------
+// KoboiLLM is an OpenAI-compatible proxy that exposes 100+ models from OpenAI,
+// Anthropic (Claude), Google (Gemini), Groq, Meta and others under one key.
+// Models are referenced as `<vendor>/<model>` (e.g. `openai/gpt-4o-mini`,
+// `anthropic/claude-3-5-sonnet-20241022`, `google/gemini-2.0-flash`). The wire
+// format is identical to OpenAI's, so we delegate to the OpenAI helpers with a
+// custom base URL — same pattern Groq uses above.
+function koboillmBase(input: { baseUrl?: string }): string {
+  return input.baseUrl?.replace(/\/+$/, '') || 'https://lite.koboillm.com/v1'
+}
+
+async function koboillmCheckKey(
+  input: KeyInput
+): Promise<{ ok: boolean; status: string; error?: string }> {
+  return openaiCheckKey({ ...input, baseUrl: koboillmBase(input) })
+}
+
+async function koboillmFetchModels(
+  input: FetchModelsInput
+): Promise<{ ok: boolean; models?: unknown[]; error?: string }> {
+  return openaiFetchModels({ ...input, baseUrl: koboillmBase(input) })
+}
+
+async function koboillmGenerate(
+  input: GenerateInput
+): Promise<{ ok: boolean; metadata?: GenericMetadata; error?: string; status?: string }> {
+  return openaiGenerate({ ...input, baseUrl: koboillmBase(input) })
+}
+
 export function registerAiIpc(): void {
   ipcMain.handle('ai:check-key', async (_e, input: KeyInput) => {
     if (!input.apiKey) return { ok: false, status: 'Invalid', error: 'API key is empty' }
@@ -336,6 +365,8 @@ export function registerAiIpc(): void {
         return openaiCheckKey(input)
       case 'Groq':
         return groqCheckKey(input)
+      case 'KoboiLLM':
+        return koboillmCheckKey(input)
       case 'Custom':
         return openaiCheckKey(input) // assume OpenAI-compatible
       default:
@@ -352,6 +383,8 @@ export function registerAiIpc(): void {
         return openaiFetchModels(input)
       case 'Groq':
         return groqFetchModels(input)
+      case 'KoboiLLM':
+        return koboillmFetchModels(input)
       case 'Custom':
         return openaiFetchModels(input)
       default:
@@ -368,6 +401,8 @@ export function registerAiIpc(): void {
         return openaiGenerate(input)
       case 'Groq':
         return groqGenerate(input)
+      case 'KoboiLLM':
+        return koboillmGenerate(input)
       case 'Custom':
         return openaiGenerate(input)
       default:

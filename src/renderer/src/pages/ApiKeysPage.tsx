@@ -21,7 +21,7 @@ import {
 import type { ApiKeyEntry, ApiProvider, ModelPreset } from '@renderer/types'
 import { formatDateTime, maskApiKey } from '@renderer/utils/format'
 
-const PROVIDERS: ApiProvider[] = ['Gemini', 'OpenAI', 'Groq', 'Custom']
+const PROVIDERS: ApiProvider[] = ['Gemini', 'OpenAI', 'Groq', 'KoboiLLM', 'Custom']
 
 const STATUS_COLORS: Record<ApiKeyEntry['status'], { bg: string; fg: string }> = {
   Untested: { bg: 'rgba(232,217,245,0.85)', fg: '#5a4884' },
@@ -162,8 +162,9 @@ export function ApiKeysPage() {
         <div>
           <h2 className="section-title">API Keys</h2>
           <p className="section-sub">
-            Up to {MAX_API_KEYS} keys across Gemini, OpenAI, Groq, and Custom (OpenAI-compatible).
-            Lower priority numbers are tried first; the next key takes over on rate limit / error.
+            Up to {MAX_API_KEYS} keys across Gemini, OpenAI, Groq, KoboiLLM (multi-vendor proxy),
+            and Custom (OpenAI-compatible). Lower priority numbers are tried first; the next key
+            takes over on rate limit / error.
           </p>
           <EncryptionStatusPill status={encryptionStatus} />
         </div>
@@ -195,7 +196,7 @@ export function ApiKeysPage() {
           <KeyRound size={28} />
           <p className="section-sub">
             No API keys yet. The app will use a built-in mock provider until you add one. Add a key
-            to call Gemini / OpenAI / Groq for real metadata.
+            to call Gemini / OpenAI / Groq / KoboiLLM for real metadata.
           </p>
         </div>
       ) : !apiKeys.some((k) => k.enabled && k.apiKey) ? (
@@ -351,6 +352,15 @@ export function ApiKeysPage() {
                         className="input"
                         style={{ marginTop: 4 }}
                         placeholder="Base URL (OpenAI-compatible)"
+                        value={k.baseUrl ?? ''}
+                        onChange={(e) => updateApiKey(k.id, { baseUrl: e.target.value })}
+                      />
+                    )}
+                    {k.provider === 'KoboiLLM' && (
+                      <input
+                        className="input"
+                        style={{ marginTop: 4 }}
+                        placeholder="Base URL (defaults to https://lite.koboillm.com/v1)"
                         value={k.baseUrl ?? ''}
                         onChange={(e) => updateApiKey(k.id, { baseUrl: e.target.value })}
                       />
