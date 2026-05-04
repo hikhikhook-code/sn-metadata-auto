@@ -42,7 +42,7 @@ const NAV: NavItem[] = [
     key: 'apikeys',
     label: 'API Keys',
     icon: <KeyRound size={18} />,
-    hint: 'Manage Gemini, OpenAI, Groq, and custom keys.'
+    hint: 'Manage Gemini, OpenAI, Groq, KoboiLLM, and custom keys.'
   },
   {
     key: 'logs',

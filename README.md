@@ -7,7 +7,7 @@ Built with **Electron + React + TypeScript + Vite**.
 ## Features
 
 - **Batch metadata generation** for JPG / JPEG / PNG / WEBP / MP4 / MOV / AVI / WEBM / SVG / EPS files
-- **Multi-provider AI** — Gemini, OpenAI, Groq, and any OpenAI-compatible endpoint (Custom). Up to 10 keys with priority-based rotation.
+- **Multi-provider AI** — Gemini, OpenAI, Groq, **KoboiLLM** (an OpenAI-compatible gateway that exposes 100+ models from OpenAI, Anthropic / Claude, Google, Groq, Meta and more under a single API key), and any other OpenAI-compatible endpoint (Custom). Up to 10 keys with priority-based rotation.
 - **Direct in-card metadata editing** — title, description, keywords, category, rename preview
 - **Drag & drop keyword chips** with dedupe, auto-sort, copyright-hint detection, and target counter (49/49)
 - **Approve & Rename workflow** — files are never renamed automatically; you stay in control
