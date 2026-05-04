@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: sn-metadata-auto
+productName: SN Metadata Auto
 directories:
   buildResources: build
 files:
