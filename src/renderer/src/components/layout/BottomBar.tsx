@@ -95,7 +95,7 @@ export function BottomBar() {
             flex: 1,
             height: 6,
             borderRadius: 999,
-            background: 'rgba(255,255,255,0.5)',
+            background: 'var(--c-glass-hover)',
             border: '1px solid var(--c-border-strong)',
             overflow: 'hidden',
             maxWidth: 320

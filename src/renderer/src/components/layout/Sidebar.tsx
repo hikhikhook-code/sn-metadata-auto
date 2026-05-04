@@ -149,21 +149,21 @@ export function Sidebar() {
                 gap: 10,
                 padding: collapsed ? '10px' : '10px 12px',
                 borderRadius: 14,
-                background: isActive
-                  ? 'linear-gradient(135deg, rgba(255,210,225,0.85), rgba(225,210,245,0.85))'
-                  : 'transparent',
+                background: isActive ? 'var(--c-nav-active-bg)' : 'transparent',
                 color: isActive ? 'var(--c-accent-strong)' : 'var(--c-text)',
                 fontWeight: isActive ? 700 : 500,
                 fontSize: 13,
                 width: '100%',
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                border: isActive ? '1px solid rgba(201,122,139,0.25)' : '1px solid transparent',
+                border: isActive
+                  ? '1px solid var(--c-nav-active-border)'
+                  : '1px solid transparent',
                 transition: 'background 0.15s ease, color 0.15s ease',
                 cursor: 'pointer'
               }}
               onMouseEnter={(e) => {
                 if (!isActive)
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.55)'
+                  (e.currentTarget as HTMLElement).style.background = 'var(--c-glass-2)'
               }}
               onMouseLeave={(e) => {
                 if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'

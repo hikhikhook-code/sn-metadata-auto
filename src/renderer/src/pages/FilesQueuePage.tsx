@@ -149,7 +149,7 @@ export function FilesQueuePage() {
         className="glass"
         style={{
           border: dragOver ? '2px dashed var(--c-accent)' : '2px dashed var(--c-border-strong)',
-          background: dragOver ? 'rgba(255,235,225,0.6)' : 'rgba(255,255,255,0.4)',
+          background: dragOver ? 'var(--c-accent-soft)' : 'var(--c-glass-1)',
           padding: 18,
           textAlign: 'center',
           color: 'var(--c-text-soft)',

@@ -14,6 +14,7 @@ import { Toast } from '../ui/Toast'
 import { useAutoSave, useCooldownTicker } from '@renderer/hooks/useBatch'
 import { useProjectActions } from '@renderer/hooks/useProject'
 import { useClickFeedback } from '@renderer/hooks/useClickFeedback'
+import { useTheme } from '@renderer/hooks/useTheme'
 
 export function AppShell() {
   const active = useAppStore((s) => s.ui.activePage)
@@ -21,6 +22,7 @@ export function AppShell() {
   useAutoSave()
   useCooldownTicker()
   useClickFeedback()
+  useTheme()
 
   useEffect(() => {
     void restoreLastSession()

@@ -371,7 +371,7 @@ export function ExportPage() {
             padding: '6px 10px',
             border: '1px solid var(--c-border)',
             borderRadius: 8,
-            background: 'rgba(255,255,255,0.4)',
+            background: 'var(--c-glass-1)',
             fontSize: 12
           }}
         >
@@ -439,7 +439,7 @@ export function ExportPage() {
             padding: '10px 12px',
             border: '1px solid var(--c-border)',
             borderRadius: 8,
-            background: 'rgba(255,255,255,0.35)'
+            background: 'var(--c-glass-1)'
           }}
         >
           <label
@@ -623,7 +623,7 @@ export function ExportPage() {
                         key={k}
                         style={{
                           padding: '5px 8px',
-                          borderBottom: '1px solid rgba(255,255,255,0.4)',
+                          borderBottom: '1px solid var(--c-border)',
                           maxWidth: 220,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',

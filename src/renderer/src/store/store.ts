@@ -24,6 +24,7 @@ const PROJECT_VERSION = 1
 
 const DEFAULT_SETTINGS: AppSettings = {
   settingsMode: 'simple',
+  theme: 'system',
   defaultKeywordCount: 49,
   platformPreset: 'Adobe Stock',
   customCsvSchema: {

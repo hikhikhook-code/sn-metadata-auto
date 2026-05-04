@@ -83,7 +83,7 @@ function ModeToggle({
   }
   const activeBtn: CSSProperties = {
     ...baseBtn,
-    background: 'var(--c-bg-elev, rgba(255,255,255,0.85))',
+    background: 'var(--c-glass-4)',
     color: 'var(--c-heading)',
     boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
   }
@@ -96,7 +96,7 @@ function ModeToggle({
         padding: 3,
         borderRadius: 999,
         border: '1px solid var(--c-border, rgba(0,0,0,0.08))',
-        background: 'var(--c-bg-soft, rgba(255,255,255,0.4))',
+        background: 'var(--c-glass-1)',
         gap: 2,
         alignSelf: 'flex-start'
       }}
@@ -129,10 +129,11 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
   return (
     <>
       <Card title="General">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <PlatformPresetField />
           <DefaultKeywordCountField />
           <DefaultViewModeField />
+          <ThemeField />
         </div>
       </Card>
 
@@ -166,6 +167,7 @@ function AdvancedSettings() {
           <PlatformPresetField />
           <DefaultKeywordCountField />
           <DefaultViewModeField />
+          <ThemeField />
         </div>
       </Card>
 
@@ -408,6 +410,31 @@ function DefaultViewModeField() {
       >
         <option value="comfort">Comfort</option>
         <option value="compact">Compact</option>
+      </select>
+    </div>
+  )
+}
+
+/**
+ * Theme picker. `'system'` (the default) tracks the host OS appearance via
+ * `prefers-color-scheme`; `'light'` / `'dark'` pin the app regardless of
+ * what the OS does. The renderer's `useTheme` hook owns applying the
+ * resulting `data-theme` attribute on `<html>`.
+ */
+function ThemeField() {
+  const settings = useAppStore((s) => s.settings)
+  const update = useAppStore((s) => s.updateSettings)
+  return (
+    <div className="field">
+      <span className="label">Theme</span>
+      <select
+        className="select"
+        value={settings.theme}
+        onChange={(e) => update({ theme: e.target.value as 'light' | 'dark' | 'system' })}
+      >
+        <option value="system">Match system</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
       </select>
     </div>
   )

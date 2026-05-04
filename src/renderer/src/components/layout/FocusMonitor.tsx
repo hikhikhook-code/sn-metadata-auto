@@ -176,7 +176,7 @@ export function FocusMonitor({
                     ? 'rgba(216, 191, 247, 0.55)'
                     : status === 'Paused'
                       ? 'rgba(255, 230, 215, 0.85)'
-                      : 'rgba(255, 255, 255, 0.6)'
+                      : 'var(--c-glass-2)'
               }}
             >
               {status}
@@ -209,7 +209,7 @@ export function FocusMonitor({
                   flex: 1,
                   height: 6,
                   borderRadius: 999,
-                  background: 'rgba(0,0,0,0.06)',
+                  background: 'var(--c-border-strong)',
                   overflow: 'hidden'
                 }}
               >
@@ -262,7 +262,7 @@ export function FocusMonitor({
             style={{
               padding: '8px 10px',
               borderRadius: 10,
-              background: 'rgba(255,255,255,0.55)',
+              background: 'var(--c-glass-2)',
               border: '1px solid var(--c-border)',
               fontSize: 12,
               display: 'flex',
