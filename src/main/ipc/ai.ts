@@ -265,7 +265,10 @@ async function openaiFetchModels(
     })
     return { ok: true, models }
   } catch (e) {
-    return { ok: false, error: 'Network error: ' + (e as Error).message }
+    // Catches the fetch() throw (network) *and* r.json() throw (malformed
+    // response body); use the raw message so a JSON-parse failure isn't
+    // mis-labeled as "Network error".
+    return { ok: false, error: (e as Error).message }
   }
 }
 
@@ -310,7 +313,10 @@ async function openaiGenerate(
     if (!meta) return { ok: false, status: 'Error', error: 'Failed to parse model output' }
     return { ok: true, metadata: meta }
   } catch (e) {
-    return { ok: false, status: 'Error', error: 'Network error: ' + (e as Error).message }
+    // Catches readBase64() (file I/O), fetch() (network), and r.json()
+    // (parse). Using the raw message keeps ENOENT / parse errors readable
+    // instead of being mis-labeled as a network failure.
+    return { ok: false, status: 'Error', error: (e as Error).message }
   }
 }
 

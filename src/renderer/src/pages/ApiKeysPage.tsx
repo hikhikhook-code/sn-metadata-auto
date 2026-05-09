@@ -287,8 +287,19 @@ export function ApiKeysPage() {
                           model: first,
                           status: 'Untested'
                         }
-                        if (provider === 'KoboiLLM' && !k.baseUrl) {
-                          patch.baseUrl = KOBOILLM_DEFAULT_BASE_URL
+                        // Only KoboiLLM and Custom expose a Base URL input,
+                        // and `openAiBase()` / `groqBase()` in the IPC layer
+                        // honor any non-empty `baseUrl` over their hardcoded
+                        // default. So when switching to a provider that does
+                        // *not* expose the field (Gemini / OpenAI / Groq), we
+                        // must clear any leftover URL from a previous
+                        // KoboiLLM or Custom selection — otherwise the next
+                        // Check / Fetch / Generate call would silently route
+                        // to the wrong endpoint.
+                        if (provider === 'KoboiLLM') {
+                          if (!k.baseUrl) patch.baseUrl = KOBOILLM_DEFAULT_BASE_URL
+                        } else if (provider !== 'Custom') {
+                          patch.baseUrl = undefined
                         }
                         updateApiKey(k.id, patch)
                       }}
