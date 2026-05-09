@@ -208,6 +208,17 @@ function openAiBase(input: { baseUrl?: string }): string {
   return input.baseUrl?.replace(/\/+$/, '') || 'https://api.openai.com/v1'
 }
 
+// Map an OpenAI-compatible HTTP status code to a user-facing error string.
+// Status codes never round-trip to the user — they only see this text — so it
+// must be self-explanatory. The wider `status` enum (Valid / Invalid / Limit /
+// Error) is still set by the caller to drive UI badges + key-rotation logic.
+function openAiHttpErrorMessage(status: number): string {
+  if (status === 401 || status === 403) return 'Invalid API key (HTTP ' + status + ')'
+  if (status === 429) return 'Rate limit hit (HTTP 429) — wait or rotate keys'
+  if (status >= 500 && status < 600) return 'Server error (HTTP ' + status + ')'
+  return 'HTTP ' + status
+}
+
 async function openaiCheckKey(
   input: KeyInput
 ): Promise<{ ok: boolean; status: string; error?: string }> {
@@ -216,10 +227,12 @@ async function openaiCheckKey(
       headers: { authorization: `Bearer ${input.apiKey}` }
     })
     if (r.ok) return { ok: true, status: 'Valid' }
-    if (r.status === 429) return { ok: false, status: 'Limit', error: 'Rate limited' }
-    return { ok: false, status: 'Invalid', error: `HTTP ${r.status}` }
+    if (r.status === 429) return { ok: false, status: 'Limit', error: openAiHttpErrorMessage(429) }
+    if (r.status >= 500 && r.status < 600)
+      return { ok: false, status: 'Error', error: openAiHttpErrorMessage(r.status) }
+    return { ok: false, status: 'Invalid', error: openAiHttpErrorMessage(r.status) }
   } catch (e) {
-    return { ok: false, status: 'Error', error: (e as Error).message }
+    return { ok: false, status: 'Error', error: 'Network error: ' + (e as Error).message }
   }
 }
 
@@ -230,7 +243,7 @@ async function openaiFetchModels(
     const r = await fetch(`${openAiBase(input)}/models`, {
       headers: { authorization: `Bearer ${input.apiKey}` }
     })
-    if (!r.ok) return { ok: false, error: `HTTP ${r.status}` }
+    if (!r.ok) return { ok: false, error: openAiHttpErrorMessage(r.status) }
     const data = (await r.json()) as { data?: Array<{ id: string }> }
     const models = (data.data ?? []).map((m) => {
       const id = m.id
@@ -252,6 +265,9 @@ async function openaiFetchModels(
     })
     return { ok: true, models }
   } catch (e) {
+    // Catches the fetch() throw (network) *and* r.json() throw (malformed
+    // response body); use the raw message so a JSON-parse failure isn't
+    // mis-labeled as "Network error".
     return { ok: false, error: (e as Error).message }
   }
 }
@@ -284,12 +300,10 @@ async function openaiGenerate(
       })
     })
     if (!r.ok) {
-      if (r.status === 429) return { ok: false, status: 'Limit', error: 'Rate limited' }
-      return {
-        ok: false,
-        status: r.status === 401 || r.status === 403 ? 'Invalid' : 'Error',
-        error: `HTTP ${r.status}`
-      }
+      if (r.status === 429)
+        return { ok: false, status: 'Limit', error: openAiHttpErrorMessage(429) }
+      const status = r.status === 401 || r.status === 403 ? 'Invalid' : 'Error'
+      return { ok: false, status, error: openAiHttpErrorMessage(r.status) }
     }
     const data = (await r.json()) as {
       choices?: Array<{ message?: { content?: string } }>
@@ -299,6 +313,9 @@ async function openaiGenerate(
     if (!meta) return { ok: false, status: 'Error', error: 'Failed to parse model output' }
     return { ok: true, metadata: meta }
   } catch (e) {
+    // Catches readBase64() (file I/O), fetch() (network), and r.json()
+    // (parse). Using the raw message keeps ENOENT / parse errors readable
+    // instead of being mis-labeled as a network failure.
     return { ok: false, status: 'Error', error: (e as Error).message }
   }
 }
@@ -327,14 +344,19 @@ async function groqGenerate(
 }
 
 // ---------- KoboiLLM ----------
-// KoboiLLM is an OpenAI-compatible proxy that exposes 100+ models from OpenAI,
-// Anthropic (Claude), Google (Gemini), Groq, Meta and others under one key.
-// Models are referenced as `<vendor>/<model>` (e.g. `openai/gpt-4o-mini`,
-// `anthropic/claude-3-5-sonnet-20241022`, `google/gemini-2.0-flash`). The wire
-// format is identical to OpenAI's, so we delegate to the OpenAI helpers with a
-// custom base URL — same pattern Groq uses above.
+// KoboiLLM is an OpenAI-compatible proxy that exposes models from OpenAI,
+// Google (Gemini), Anthropic and others under a single API key. Models are
+// referenced as `<vendor>/<model>` (e.g. `openai/gpt-5-mini`,
+// `gemini/gemini-2.5-flash`). The wire format is identical to OpenAI's, so we
+// delegate to the OpenAI helpers with a custom base URL — same pattern Groq
+// uses above. KoboiLLM model availability changes over time; the `Fetch
+// Models` button on the API Keys page calls `koboillmFetchModels` to load the
+// live list, which is then merged with the curated suggestions in
+// `services/models.ts` (manually entered custom IDs are preserved).
+export const KOBOILLM_DEFAULT_BASE_URL = 'https://lite.koboillm.com/v1'
+
 function koboillmBase(input: { baseUrl?: string }): string {
-  return input.baseUrl?.replace(/\/+$/, '') || 'https://lite.koboillm.com/v1'
+  return input.baseUrl?.replace(/\/+$/, '') || KOBOILLM_DEFAULT_BASE_URL
 }
 
 async function koboillmCheckKey(

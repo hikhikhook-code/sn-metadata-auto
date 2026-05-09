@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactElement } from 'react'
 import { useAppStore, MAX_API_KEYS } from '@renderer/store/store'
-import { PRESET_MODELS } from '@renderer/services/models'
+import { PRESET_MODELS, KOBOILLM_DEFAULT_BASE_URL } from '@renderer/services/models'
 import { InfoIcon, Tooltip } from '@renderer/components/ui/Tooltip'
 import {
   Plus,
@@ -74,6 +74,10 @@ export function ApiKeysPage() {
   async function checkKey(id: string) {
     const k = useAppStore.getState().apiKeys.find((x) => x.id === id)
     if (!k) return
+    if (!k.apiKey) {
+      showToast('warning', `${k.name}: API key is empty`)
+      return
+    }
     setBusy((b) => new Set(b).add(id))
     try {
       const res = await window.api.ai.checkKey({
@@ -93,7 +97,8 @@ export function ApiKeysPage() {
         `Check ${k.provider} Key ${k.priority}: ${res.status}${res.error ? ` (${res.error})` : ''}`,
         { apiKeySlot: `${k.provider} Key ${k.priority}` }
       )
-      showToast(res.ok ? 'success' : 'warning', `${k.name}: ${res.status}`)
+      const toastMsg = res.ok ? `${k.name}: ${res.status}` : `${k.name}: ${res.error ?? res.status}`
+      showToast(res.ok ? 'success' : 'warning', toastMsg)
     } finally {
       setBusy((b) => {
         const n = new Set(b)
@@ -277,7 +282,26 @@ export function ApiKeysPage() {
                       onChange={(e) => {
                         const provider = e.target.value as ApiProvider
                         const first = PRESET_MODELS[provider]?.[0]?.id ?? ''
-                        updateApiKey(k.id, { provider, model: first, status: 'Untested' })
+                        const patch: Partial<ApiKeyEntry> = {
+                          provider,
+                          model: first,
+                          status: 'Untested'
+                        }
+                        // Only KoboiLLM and Custom expose a Base URL input,
+                        // and `openAiBase()` / `groqBase()` in the IPC layer
+                        // honor any non-empty `baseUrl` over their hardcoded
+                        // default. So when switching to a provider that does
+                        // *not* expose the field (Gemini / OpenAI / Groq), we
+                        // must clear any leftover URL from a previous
+                        // KoboiLLM or Custom selection — otherwise the next
+                        // Check / Fetch / Generate call would silently route
+                        // to the wrong endpoint.
+                        if (provider === 'KoboiLLM') {
+                          if (!k.baseUrl) patch.baseUrl = KOBOILLM_DEFAULT_BASE_URL
+                        } else if (provider !== 'Custom') {
+                          patch.baseUrl = undefined
+                        }
+                        updateApiKey(k.id, patch)
                       }}
                     >
                       {PROVIDERS.map((p) => (
@@ -286,6 +310,11 @@ export function ApiKeysPage() {
                         </option>
                       ))}
                     </select>
+                    {k.provider === 'KoboiLLM' && (
+                      <span className="text-muted" style={{ fontSize: 11, lineHeight: 1.35 }}>
+                        OpenAI-compatible proxy for multiple LLM models.
+                      </span>
+                    )}
                   </div>
 
                   <div className="field" style={{ gap: 4 }}>
@@ -315,6 +344,15 @@ export function ApiKeysPage() {
                       value={presets.some((p) => p.id === k.model) ? '' : k.model}
                       onChange={(e) => updateApiKey(k.id, { model: e.target.value })}
                     />
+                    {k.provider === 'KoboiLLM' && (
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: 11, lineHeight: 1.35, marginTop: 4 }}
+                      >
+                        Choose a KoboiLLM model, or type another model ID if it is available in your
+                        KoboiLLM account.
+                      </span>
+                    )}
                     {visionWarn && (
                       <span style={{ fontSize: 11, color: 'var(--c-warning)', marginTop: 4 }}>
                         ⚠ This model may not support image / visual analysis. Metadata quality may
@@ -360,7 +398,7 @@ export function ApiKeysPage() {
                       <input
                         className="input"
                         style={{ marginTop: 4 }}
-                        placeholder="Base URL (defaults to https://lite.koboillm.com/v1)"
+                        placeholder={`Base URL (defaults to ${KOBOILLM_DEFAULT_BASE_URL})`}
                         value={k.baseUrl ?? ''}
                         onChange={(e) => updateApiKey(k.id, { baseUrl: e.target.value })}
                       />
@@ -435,6 +473,15 @@ export function ApiKeysPage() {
                   </div>
                 </div>
 
+                {k.provider === 'KoboiLLM' && (
+                  <div
+                    className="info-banner"
+                    style={{ marginTop: 10, fontSize: 11, padding: '6px 12px' }}
+                  >
+                    KoboiLLM is an OpenAI-compatible proxy. Use your KoboiLLM key and choose any
+                    model available in your account.
+                  </div>
+                )}
                 {k.lastError && (
                   <div className="text-muted" style={{ fontSize: 11, marginTop: 8 }}>
                     <XCircle size={11} style={{ verticalAlign: '-2px' }} /> {k.lastError}
