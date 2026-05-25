@@ -1,5 +1,4 @@
 import type { Metadata } from '@renderer/types'
-import { stripExtension } from '@renderer/utils/format'
 
 const COLORS = ['warm', 'soft', 'vibrant', 'pastel', 'natural', 'fresh', 'minimal', 'modern']
 const SUBJECTS = [
@@ -91,11 +90,10 @@ const CATEGORIES = [
   'Technology'
 ]
 
-export function mockGenerate(filename: string, keywordCount: number): Metadata {
-  const stem = stripExtension(filename).replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+export function mockGenerate(_filename: string, keywordCount: number): Metadata {
   const color = COLORS[Math.floor(Math.random() * COLORS.length)]
   const subject = SUBJECTS[Math.floor(Math.random() * SUBJECTS.length)]
-  const titleBase = stem.length > 3 ? stem : `${color} ${subject}`
+  const titleBase = `${color} ${subject}`
   const title =
     titleBase
       .split(' ')

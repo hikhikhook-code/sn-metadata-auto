@@ -32,6 +32,34 @@ interface GenericMetadata {
   category: string
 }
 
+const STOCK_CATEGORIES = [
+  'Animals',
+  'Architecture',
+  'Beauty / Fashion',
+  'Business',
+  'Education',
+  'Food and Drink',
+  'Healthcare',
+  'Holidays',
+  'Industrial',
+  'Lifestyle',
+  'Nature',
+  'Objects',
+  'People',
+  'Religion',
+  'Science',
+  'Signs / Symbols',
+  'Sports',
+  'Technology',
+  'Transportation',
+  'Travel',
+  'Vintage',
+  'Wellbeing',
+  'Abstract',
+  'Backgrounds / Textures',
+  'Concepts'
+]
+
 const MIME_BY_EXT: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
@@ -45,34 +73,67 @@ const MIME_BY_EXT: Record<string, string> = {
   eps: 'application/postscript'
 }
 
-function buildPrompt(keywordCount: number): string {
-  return `You are a professional microstock metadata specialist. Analyze the uploaded visual file carefully and generate accurate, buyer-focused metadata for stock content.
+function buildSystemPrompt(): string {
+  return `You are a senior microstock metadata editor. You analyze only the uploaded visual content and return marketplace-ready metadata. You never use filenames, paths, random IDs, generator labels, watermarks, or upload-source text as metadata.`
+}
+
+function buildMetadataPrompt(keywordCount: number, fileType: string): string {
+  return `Analyze the uploaded ${fileType.toUpperCase()} file visually and generate accurate commercial stock metadata.
+
+Hard rule: the title, description, and keywords must describe what is visible in the media. Ignore filename-like text, random suffixes, creator names, "via", "Firefly", "Auto", upload source labels, and any text that is not actually part of the visual subject.
 
 Return ONLY valid JSON with this exact structure (no markdown, no code fence):
 {"title":"","description":"","keywords":[],"category":""}
 
-Title rules (very important):
-- Be concise and ideally under 70 characters; never exceed 200 characters.
-- Describe the unique visual content in one short, natural phrase.
-- Must NOT be a comma-separated keyword list.
-- Must be based on the visible content, not the source filename or file path.
-- Do NOT include random file IDs, stock-site names, generator names, usernames, "via ...", "Firefly", "Auto", or similar filename suffixes.
-- Include the most important searchable terms naturally in the phrase.
-- Avoid brand names, logos, copyrighted characters, artist names, trademarks, and misleading terms.
-- Must be suitable for use as a file name (no slashes, no quotes, no leading/trailing punctuation).
+Title:
+- Write one natural English stock title, 45-70 characters when possible.
+- Use the main visible subject first, then the setting/action/concept.
+- Do not write a keyword list. Do not use commas unless naturally needed.
+- Do not include file IDs, camera names, usernames, provider names, generator names, "via", "Firefly", or "Auto".
+- Do not invent brands, locations, people identity, medical claims, or events.
+- Must be safe as a filename: no slashes, quotes, pipes, leading/trailing punctuation.
 
-Description rules:
-- One natural sentence describing the visual content accurately.
+Description:
+- Write one complete natural sentence, 90-160 characters when possible.
+- Describe subject, action, setting, mood, and commercial use case if visible.
+- Do not repeat the title exactly.
+- Do not mention "image", "photo", "stock", "AI", "generated", file names, or metadata.
 
-Keyword rules:
-- Generate exactly ${keywordCount} keywords.
-- Put the most important and visually relevant keywords in the first 10 positions.
-- Keywords must be lowercase, no duplicates.
-- Avoid brand names, logos, copyrighted characters, artist names, trademarks.
-- Do not include anything that is not visible.
-- For vector files include terms like vector, illustration, icon, graphic only if relevant.
-- For video include motion-related keywords only if visible.
-- Do not use vague filler keywords.`
+Keywords:
+- Generate exactly ${keywordCount} keywords as a JSON array of strings.
+- All keywords must be lowercase, trimmed, unique, and comma-free.
+- The first 10 keywords must be the strongest buyer search terms in priority order.
+- Include visible subject, setting, action, attributes, style, concept, composition, and use case.
+- Do not include filler terms such as "image", "photo", "stock", "generated", "ai", "high quality", "beautiful", "creative", "design" unless they are visibly specific and useful.
+- Avoid brands, logos, copyrighted characters, artist names, trademarks, exact locations, medical/legal claims, and anything not visible.
+- For vectors, include "vector", "illustration", "icon", or "graphic" only when visually true.
+- For video, include motion/action terms only when visible.
+
+Category:
+- Choose exactly one category from this list:
+${STOCK_CATEGORIES.join(', ')}
+
+Quality check before final JSON:
+- If the title sounds like a filename, rewrite it from the visual content.
+- If keywords are generic or duplicated, replace them with visible, buyer-focused terms.
+- If uncertain, use conservative visual terms rather than guessing.`
+}
+
+function normalizeKeywordList(raw: unknown): string[] {
+  const source = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of source) {
+    const keyword = String(item ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/^[,;|]+|[,;|]+$/g, '')
+    if (!keyword || seen.has(keyword)) continue
+    seen.add(keyword)
+    out.push(keyword)
+  }
+  return out
 }
 
 function parseJson(content: string): GenericMetadata | null {
@@ -90,7 +151,7 @@ function parseJson(content: string): GenericMetadata | null {
     return {
       title: String(obj.title ?? ''),
       description: String(obj.description ?? ''),
-      keywords: Array.isArray(obj.keywords) ? obj.keywords.map((k) => String(k)) : [],
+      keywords: normalizeKeywordList(obj.keywords),
       category: String(obj.category ?? '')
     }
   } catch {
@@ -173,7 +234,7 @@ async function geminiGenerate(
         {
           role: 'user',
           parts: [
-            { text: buildPrompt(input.keywordCount) },
+            { text: `${buildSystemPrompt()}\n\n${buildMetadataPrompt(input.keywordCount, input.fileType)}` },
             { inline_data: { mime_type: mime, data: base64 } }
           ]
         }
@@ -290,9 +351,13 @@ async function openaiGenerate(
         model: input.model,
         messages: [
           {
+            role: 'system',
+            content: buildSystemPrompt()
+          },
+          {
             role: 'user',
             content: [
-              { type: 'text', text: buildPrompt(input.keywordCount) },
+              { type: 'text', text: buildMetadataPrompt(input.keywordCount, input.fileType) },
               { type: 'image_url', image_url: { url: dataUrl } }
             ]
           }
