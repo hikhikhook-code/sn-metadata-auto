@@ -6,7 +6,7 @@ import type { ApiProvider, ModelPreset } from '@renderer/types'
  * KoboiLLM provider, and as the fallback used by the IPC layer when the user
  * leaves the field blank. The user can override this for self-hosted gateways.
  */
-export const KOBOILLM_DEFAULT_BASE_URL = 'https://lite.koboillm.com/v1'
+export const KOBOILLM_DEFAULT_BASE_URL = 'https://api.koboillm.com/v1'
 
 export const PRESET_MODELS: Record<ApiProvider, ModelPreset[]> = {
   Gemini: [
@@ -104,7 +104,7 @@ export const PRESET_MODELS: Record<ApiProvider, ModelPreset[]> = {
       vision: false
     }
   ],
-  // KoboiLLM is an OpenAI-compatible proxy at https://lite.koboillm.com that
+// KoboiLLM is an OpenAI-compatible proxy at https://api.koboillm.com that
   // gives access to many underlying models from OpenAI, Google (Gemini),
   // Anthropic and others under one API key. Models are referenced as
   // `<vendor>/<model>`. The curated list below mirrors the model IDs

@@ -353,7 +353,7 @@ async function groqGenerate(
 // Models` button on the API Keys page calls `koboillmFetchModels` to load the
 // live list, which is then merged with the curated suggestions in
 // `services/models.ts` (manually entered custom IDs are preserved).
-export const KOBOILLM_DEFAULT_BASE_URL = 'https://lite.koboillm.com/v1'
+export const KOBOILLM_DEFAULT_BASE_URL = 'https://api.koboillm.com/v1'
 
 function koboillmBase(input: { baseUrl?: string }): string {
   return input.baseUrl?.replace(/\/+$/, '') || KOBOILLM_DEFAULT_BASE_URL
