@@ -11,6 +11,10 @@ const RASTER_PREVIEWABLE = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 
 // invalidate the cache automatically.
 const thumbnailCache = new Map<string, string>()
 
+function snfileUrl(filePath: string): string {
+  return `snfile:///${encodeURIComponent(filePath.replace(/\\/g, '/'))}`
+}
+
 interface Props {
   file: AppFile
   size?: number
@@ -32,28 +36,32 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
   // raw fs.readFile is identical in dev and packaged binaries.
   const initial = file.previewUrl ?? (previewable ? thumbnailCache.get(sourcePath) ?? null : null)
   const [src, setSrc] = useState<string | null>(initial ?? null)
-  const [imgFailed, setImgFailed] = useState(false)
+  const [failedFor, setFailedFor] = useState<string | null>(null)
   // Track the latest path we requested so an in-flight IPC for an old path
   // doesn't overwrite the state of a newer one when scrolling rapidly through
   // a large queue.
   const requestedFor = useRef<string | null>(null)
 
   useEffect(() => {
-    setImgFailed(false)
+    const deferSetSrc = (next: string | null) => queueMicrotask(() => setSrc(next))
     if (file.previewUrl) {
-      setSrc(file.previewUrl)
+      deferSetSrc(file.previewUrl)
+      return
+    }
+    if (isVideo) {
+      deferSetSrc(snfileUrl(sourcePath))
       return
     }
     if (!previewable) {
-      setSrc(null)
+      deferSetSrc(null)
       return
     }
     const cached = thumbnailCache.get(sourcePath)
     if (cached) {
-      setSrc(cached)
+      deferSetSrc(cached)
       return
     }
-    setSrc(null)
+    deferSetSrc(null)
     requestedFor.current = sourcePath
     const targetPath = sourcePath
     const targetMax = Math.max(96, size * 2)
@@ -65,16 +73,18 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
           thumbnailCache.set(targetPath, res.dataUrl)
           setSrc(res.dataUrl)
         } else {
-          setImgFailed(true)
+          setSrc(snfileUrl(targetPath))
         }
       })
       .catch(() => {
         if (requestedFor.current !== targetPath) return
-        setImgFailed(true)
+        setSrc(snfileUrl(targetPath))
       })
-  }, [sourcePath, file.previewUrl, previewable, size])
+  }, [sourcePath, file.previewUrl, previewable, isVideo, size])
 
-  const showImage = !!src && RASTER_PREVIEWABLE.has(ext) && !imgFailed
+  const failedCurrent = failedFor === sourcePath
+  const showImage = !!src && RASTER_PREVIEWABLE.has(ext) && !failedCurrent
+  const showVideo = !!src && isVideo && !failedCurrent
 
   const placeholderIcon = isVideo ? (
     <FileVideo2 size={Math.round(size * 0.42)} />
@@ -116,7 +126,21 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
             objectFit: 'cover',
             display: 'block'
           }}
-          onError={() => setImgFailed(true)}
+          onError={() => setFailedFor(sourcePath)}
+        />
+      ) : showVideo ? (
+        <video
+          src={src!}
+          muted
+          preload="metadata"
+          playsInline
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block'
+          }}
+          onError={() => setFailedFor(sourcePath)}
         />
       ) : (
         <div

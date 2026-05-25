@@ -292,7 +292,7 @@ export function MetadataCard({ file, onRegenerate, onApproveAndRename }: Props) 
   )
 }
 
-export function CompactMetadataRow({ file, onApproveAndRename }: Props) {
+export function CompactMetadataRow({ file, onRegenerate, onApproveAndRename }: Props) {
   const meta = file.editedMetadata ?? file.aiMetadata
   const tStatus = titleStatus(meta?.title ?? '')
   const compactApprovable =
@@ -365,6 +365,13 @@ export function CompactMetadataRow({ file, onApproveAndRename }: Props) {
           }
         >
           Approve
+        </button>
+        <button
+          className="btn btn-sm btn-warning"
+          onClick={() => onRegenerate(file.id)}
+          title="Regenerate metadata for this file"
+        >
+          <RefreshCcw size={13} /> Regenerate
         </button>
       </div>
     </div>

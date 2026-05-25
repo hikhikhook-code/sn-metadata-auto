@@ -130,6 +130,7 @@ function SimpleSettings({ onShowAdvanced }: { onShowAdvanced: () => void }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <ToggleField fieldKey="autoRenameAfterApprove" label="Auto rename after Approve" />
           <ToggleField fieldKey="keepOriginalBackup" label="Keep original backup" />
+          <ToggleField fieldKey="convertOutputToJpeg" label="Convert output-folder raster to JPEG" />
         </div>
       </Card>
 
@@ -267,6 +268,7 @@ function ToggleField({
     | 'useLowercaseFilename'
     | 'replaceSpacesWithHyphen'
     | 'addNumberIfDuplicate'
+    | 'convertOutputToJpeg'
     | 'autosaveProject'
     | 'tooltipsEnabled'
     | 'autoSwitchOnLimit'
@@ -456,6 +458,7 @@ function RenameRulesBody() {
         <ToggleField fieldKey="useLowercaseFilename" label="Use lowercase filenames" />
         <ToggleField fieldKey="replaceSpacesWithHyphen" label="Replace spaces with hyphen" />
         <ToggleField fieldKey="addNumberIfDuplicate" label="Add number if duplicate exists" />
+        <ToggleField fieldKey="convertOutputToJpeg" label="Convert output-folder raster to JPEG" />
       </div>
     </>
   )

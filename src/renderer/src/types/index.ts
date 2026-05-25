@@ -202,6 +202,7 @@ export interface AppSettings {
   useLowercaseFilename: boolean
   replaceSpacesWithHyphen: boolean
   addNumberIfDuplicate: boolean
+  convertOutputToJpeg: boolean
   outputFolder: string
   autosaveProject: boolean
   tooltipsEnabled: boolean

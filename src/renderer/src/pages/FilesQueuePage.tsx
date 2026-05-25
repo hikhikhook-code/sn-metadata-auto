@@ -4,6 +4,7 @@ import { FilePreview } from '@renderer/components/metadata/FilePreview'
 import { StatusBadge } from '@renderer/components/ui/StatusBadge'
 import { formatBytes } from '@renderer/utils/format'
 import { Tooltip } from '@renderer/components/ui/Tooltip'
+import { useBatchControls } from '@renderer/hooks/useBatch'
 import {
   FilePlus,
   FolderOpen,
@@ -11,7 +12,8 @@ import {
   Eraser,
   Square as SquareIcon,
   CheckSquare,
-  Upload
+  Upload,
+  RefreshCcw
 } from 'lucide-react'
 
 export function FilesQueuePage() {
@@ -25,6 +27,7 @@ export function FilesQueuePage() {
   const selectAllFiles = useAppStore((s) => s.selectAllFiles)
   const showToast = useAppStore((s) => s.showToast)
   const setActivePage = useAppStore((s) => s.setActivePage)
+  const { regenerateOne } = useBatchControls()
 
   const [dragOver, setDragOver] = useState(false)
 
@@ -234,14 +237,25 @@ export function FilesQueuePage() {
                   <span>
                     <StatusBadge status={file.status} />
                   </span>
-                  <button
-                    className="btn btn-ghost btn-icon"
-                    onClick={() => removeFiles([file.id])}
-                    aria-label="Remove"
-                    title="Remove from queue"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                    {file.status === 'Failed' && (
+                      <button
+                        className="btn btn-sm btn-warning"
+                        onClick={() => void regenerateOne(file.id)}
+                        title="Regenerate metadata for this failed file"
+                      >
+                        <RefreshCcw size={13} /> Regenerate
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      onClick={() => removeFiles([file.id])}
+                      aria-label="Remove"
+                      title="Remove from queue"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               )
             })}

@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { nativeImage } from 'electron'
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { ExifTool, type WriteTags } from 'exiftool-vendored'
@@ -17,11 +18,44 @@ export interface EmbedFileInput {
    * the original filename. Ignored in `in-place` mode (which never renames).
    */
   outputBasename?: string
+  outputFormat?: 'original' | 'jpeg'
   metadata: {
     title?: string
     description?: string
     keywords?: string[]
   }
+}
+
+const JPEG_PASSTHROUGH_EXTS = new Set(['jpg', 'jpeg'])
+const JPEG_CONVERTIBLE_EXTS = new Set(['png', 'webp'])
+
+function canOutputJpeg(source: string): boolean {
+  const ext = path.extname(source).slice(1).toLowerCase()
+  return JPEG_PASSTHROUGH_EXTS.has(ext) || JPEG_CONVERTIBLE_EXTS.has(ext)
+}
+
+function withJpegExtension(filename: string): string {
+  const ext = path.extname(filename)
+  const stem = ext ? filename.slice(0, -ext.length) : filename
+  return `${stem}.jpg`
+}
+
+async function copyOrConvertToJpeg(source: string, target: string): Promise<void> {
+  const ext = path.extname(source).slice(1).toLowerCase()
+  if (JPEG_PASSTHROUGH_EXTS.has(ext)) {
+    await fs.copyFile(source, target)
+    return
+  }
+  if (!JPEG_CONVERTIBLE_EXTS.has(ext)) {
+    await fs.copyFile(source, target)
+    return
+  }
+
+  const img = nativeImage.createFromPath(source)
+  if (img.isEmpty()) {
+    throw new Error(`Cannot decode ${ext.toUpperCase()} for JPEG conversion`)
+  }
+  await fs.writeFile(target, img.toJPEG(100))
 }
 
 export interface EmbedRequest {
@@ -136,8 +170,14 @@ async function prepareTarget(file: EmbedFileInput, req: EmbedRequest): Promise<s
       file.outputBasename && file.outputBasename.length > 0
         ? file.outputBasename
         : path.basename(file.filePath)
-    const target = path.join(outDir, basename)
-    await fs.copyFile(file.filePath, target)
+    const outputJpeg = file.outputFormat === 'jpeg' && canOutputJpeg(file.filePath)
+    const targetBasename = outputJpeg ? withJpegExtension(basename) : basename
+    const target = path.join(outDir, targetBasename)
+    if (outputJpeg) {
+      await copyOrConvertToJpeg(file.filePath, target)
+    } else {
+      await fs.copyFile(file.filePath, target)
+    }
     return target
   }
   if (req.backup) await ensureBackup(file.filePath)

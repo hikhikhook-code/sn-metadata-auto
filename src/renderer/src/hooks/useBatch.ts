@@ -433,6 +433,7 @@ export function useRename() {
               filePath: file.currentPath,
               fileType: String(file.fileType),
               outputBasename: shouldRename ? target : undefined,
+              outputFormat: settings.convertOutputToJpeg ? 'jpeg' : 'original',
               metadata: {
                 title: meta.title,
                 description: meta.description,
@@ -459,7 +460,8 @@ export function useRename() {
           return
         }
         const outputPath = detail.outputPath
-        const outputName = shouldRename ? target : file.currentFilename
+        const outputName =
+          outputPath.split(/[\\/]/).pop() ?? (shouldRename ? target : file.currentFilename)
         useAppStore
           .getState()
           .addLog('info', 'EMBED', `Copied file to output folder: ${outputPath}`, { fileId })

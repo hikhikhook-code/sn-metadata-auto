@@ -124,6 +124,7 @@ const api = {
         filePath: string
         fileType: string
         outputBasename?: string
+        outputFormat?: 'original' | 'jpeg'
         metadata: { title?: string; description?: string; keywords?: string[] }
       }>
       mode: 'in-place' | 'copy'

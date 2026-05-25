@@ -46,6 +46,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   useLowercaseFilename: false,
   replaceSpacesWithHyphen: false,
   addNumberIfDuplicate: true,
+  convertOutputToJpeg: false,
   outputFolder: '',
   autosaveProject: true,
   tooltipsEnabled: true,
