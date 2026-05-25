@@ -86,6 +86,13 @@ export const PRESET_MODELS: Record<ApiProvider, ModelPreset[]> = {
       description: 'Vision-capable Llama on Groq, very fast.'
     },
     {
+      id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+      label: 'Llama 4 Maverick 17B (Vision)',
+      category: 'Best Quality',
+      vision: true,
+      description: 'Larger Llama 4 vision-capable model on Groq.'
+    },
+    {
       id: 'llama-3.2-90b-vision-preview',
       label: 'Llama 3.2 90B Vision (Preview)',
       category: 'Preview / Experimental',
