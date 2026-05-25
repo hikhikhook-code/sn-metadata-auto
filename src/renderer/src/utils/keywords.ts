@@ -15,6 +15,30 @@ export function dedupeKeywords(list: string[]): string[] {
   return out
 }
 
+export function parsePriorityKeywords(text: string): string[] {
+  return dedupeKeywords(String(text || '').split(/[\s,]+/))
+}
+
+export function prioritizeKeywords(
+  existingKeywords: string[] | string,
+  priorityKeywords: string[] | string,
+  maxKeywords?: number | null
+): string[] {
+  const existing = Array.isArray(existingKeywords)
+    ? existingKeywords
+    : String(existingKeywords || '').split(',')
+  const priority = Array.isArray(priorityKeywords)
+    ? priorityKeywords
+    : parsePriorityKeywords(priorityKeywords)
+  const max =
+    typeof maxKeywords === 'number' && Number.isFinite(maxKeywords) && maxKeywords > 0
+      ? Math.floor(maxKeywords)
+      : null
+
+  const prioritized = dedupeKeywords([...priority.map(normalizeKeyword), ...existing])
+  return max == null ? prioritized : prioritized.slice(0, max)
+}
+
 export function autoSortKeywords(list: string[]): string[] {
   // Sort by: shorter (more general/important) first, then alphabetically.
   return [...dedupeKeywords(list)].sort((a, b) => {
