@@ -7,7 +7,8 @@ import { KeywordChipList } from '@renderer/components/keywords/KeywordChipList'
 import { CATEGORIES } from '@renderer/utils/categories'
 import { formatDateTime } from '@renderer/utils/format'
 import { KEYWORD_COUNT_PRESETS } from '@renderer/utils/keywordCount'
-import { Save, RefreshCcw, FileEdit, Sparkles, RotateCcw, Undo2 } from 'lucide-react'
+import { parsePriorityKeywords, prioritizeKeywords } from '@renderer/utils/keywords'
+import { Save, RefreshCcw, FileEdit, Sparkles, RotateCcw, Undo2, ListStart } from 'lucide-react'
 import { useBatchControls, useRename } from '@renderer/hooks/useBatch'
 import { TITLE_RECOMMENDED_MAX, titleStatus } from '@renderer/utils/title'
 
@@ -15,6 +16,7 @@ type Tab = 'main' | 'keywords' | 'rename'
 
 export function MetadataEditorPage() {
   const files = useAppStore((s) => s.files)
+  const selectedFileIds = useAppStore((s) => s.selectedFileIds)
   const settings = useAppStore((s) => s.settings)
   const updateEdited = useAppStore((s) => s.updateEditedMetadata)
   const saveMetadata = useAppStore((s) => s.saveMetadata)
@@ -26,11 +28,46 @@ export function MetadataEditorPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('main')
+  const [priorityEnabled, setPriorityEnabled] = useState(false)
+  const [priorityText, setPriorityText] = useState('')
 
   const editable = useMemo(() => files.filter((f) => f.aiMetadata || f.editedMetadata), [files])
 
   const file = editable.find((f) => f.id === selectedId) ?? editable[0] ?? null
   const meta = file?.editedMetadata ?? file?.aiMetadata
+  const priorityKeywords = useMemo(() => parsePriorityKeywords(priorityText), [priorityText])
+  const editableIds = useMemo(() => new Set(editable.map((f) => f.id)), [editable])
+  const bulkTargetIds = useMemo(() => {
+    const selectedEditable = selectedFileIds.filter((id) => editableIds.has(id))
+    if (selectedEditable.length > 0) return selectedEditable
+    return file ? [file.id] : []
+  }, [editableIds, file, selectedFileIds])
+  const priorityPreview = useMemo(() => {
+    if (!meta || priorityKeywords.length === 0) return []
+    return prioritizeKeywords(meta.keywords, priorityKeywords, settings.defaultKeywordCount)
+  }, [meta, priorityKeywords, settings.defaultKeywordCount])
+
+  function applyPriorityToBulk() {
+    if (!priorityEnabled) {
+      showToast('warning', 'Enable Priority Keywords first')
+      return
+    }
+    if (priorityKeywords.length === 0) {
+      showToast('warning', 'Add priority keywords first')
+      return
+    }
+    let changed = 0
+    for (const id of bulkTargetIds) {
+      const target = files.find((f) => f.id === id)
+      const targetMeta = target?.editedMetadata ?? target?.aiMetadata
+      if (!target || !targetMeta) continue
+      updateEdited(target.id, {
+        keywords: prioritizeKeywords(targetMeta.keywords, priorityKeywords, settings.defaultKeywordCount)
+      })
+      changed++
+    }
+    showToast('success', `Priority keywords applied to ${changed} file${changed === 1 ? '' : 's'}`)
+  }
 
   return (
     <div className="page">
@@ -317,6 +354,49 @@ export function MetadataEditorPage() {
 
               {tab === 'keywords' && (
                 <div className="col" style={{ gap: 10 }}>
+                  <div className="glass-soft" style={{ padding: 12 }}>
+                    <div
+                      className="row"
+                      style={{ justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}
+                    >
+                      <label className="row" style={{ gap: 8, fontSize: 12, fontWeight: 700 }}>
+                        <input
+                          type="checkbox"
+                          checked={priorityEnabled}
+                          onChange={(e) => setPriorityEnabled(e.target.checked)}
+                        />
+                        Enable Priority Keywords
+                      </label>
+                      <span className="text-muted" style={{ fontSize: 12 }}>
+                        Target: {bulkTargetIds.length} file{bulkTargetIds.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <div className="field" style={{ marginTop: 8 }}>
+                      <span className="label">Main Keyword / Priority Keywords</span>
+                      <input
+                        className="input"
+                        value={priorityText}
+                        onChange={(e) => setPriorityText(e.target.value)}
+                        placeholder="health insurance"
+                      />
+                    </div>
+                    {priorityEnabled && priorityPreview.length > 0 && (
+                      <div className="text-muted" style={{ marginTop: 8, fontSize: 12 }}>
+                        Preview: {priorityPreview.join(', ')}
+                      </div>
+                    )}
+                    <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={applyPriorityToBulk}
+                        disabled={
+                          !priorityEnabled || priorityKeywords.length === 0 || bulkTargetIds.length === 0
+                        }
+                      >
+                        <ListStart size={14} /> Apply Priority Keywords
+                      </button>
+                    </div>
+                  </div>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
                     <span className="label" style={{ marginBottom: 0 }}>
                       Keywords{' '}
