@@ -1,18 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AppFile } from '@renderer/types'
 import { IMAGE_EXTS, VIDEO_EXTS } from '@renderer/types'
 import { FileVideo2, FileImage, FileBox, FileText, FileQuestion } from 'lucide-react'
 
 const RASTER_PREVIEWABLE = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg'])
 
-// Cache resolved data URLs by file path so re-renders or re-mounts of
-// `FilePreview` don't trigger another IPC round-trip / disk read for the
-// same file. Keyed on the resolved `currentPath || originalPath` so renames
-// invalidate the cache automatically.
-const thumbnailCache = new Map<string, string>()
-
 function snfileUrl(filePath: string): string {
-  return `snfile:///${encodeURIComponent(filePath.replace(/\\/g, '/'))}`
+  return `snfile://preview?path=${encodeURIComponent(filePath)}`
 }
 
 interface Props {
@@ -28,19 +22,9 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
   const previewable = (IMAGE_EXTS as readonly string[]).includes(ext) || ext === 'svg'
   const sourcePath = file.currentPath || file.originalPath
 
-  // Use the explicit `previewUrl` if the file already carries one (e.g. from
-  // an external thumbnail service), otherwise we resolve a base64 data URL via
-  // the main process. We do this through the IPC layer rather than exposing a
-  // protocol like `snfile://` because protocol handlers have proven flaky in
-  // production builds across Windows path encodings, while `nativeImage` +
-  // raw fs.readFile is identical in dev and packaged binaries.
-  const initial = file.previewUrl ?? (previewable ? thumbnailCache.get(sourcePath) ?? null : null)
+  const initial = file.previewUrl ?? (previewable || isVideo ? snfileUrl(sourcePath) : null)
   const [src, setSrc] = useState<string | null>(initial ?? null)
   const [failedFor, setFailedFor] = useState<string | null>(null)
-  // Track the latest path we requested so an in-flight IPC for an old path
-  // doesn't overwrite the state of a newer one when scrolling rapidly through
-  // a large queue.
-  const requestedFor = useRef<string | null>(null)
 
   useEffect(() => {
     const deferSetSrc = (next: string | null) => queueMicrotask(() => setSrc(next))
@@ -48,38 +32,11 @@ export function FilePreview({ file, size = 96, rounded = 14 }: Props) {
       deferSetSrc(file.previewUrl)
       return
     }
-    if (isVideo) {
+    if (previewable || isVideo) {
       deferSetSrc(snfileUrl(sourcePath))
       return
     }
-    if (!previewable) {
-      deferSetSrc(null)
-      return
-    }
-    const cached = thumbnailCache.get(sourcePath)
-    if (cached) {
-      deferSetSrc(cached)
-      return
-    }
     deferSetSrc(null)
-    requestedFor.current = sourcePath
-    const targetPath = sourcePath
-    const targetMax = Math.max(96, size * 2)
-    void window.api
-      .readThumbnail({ path: targetPath, maxSize: targetMax })
-      .then((res) => {
-        if (requestedFor.current !== targetPath) return
-        if (res.ok && res.dataUrl) {
-          thumbnailCache.set(targetPath, res.dataUrl)
-          setSrc(res.dataUrl)
-        } else {
-          setSrc(snfileUrl(targetPath))
-        }
-      })
-      .catch(() => {
-        if (requestedFor.current !== targetPath) return
-        setSrc(snfileUrl(targetPath))
-      })
   }, [sourcePath, file.previewUrl, previewable, isVideo, size])
 
   const failedCurrent = failedFor === sourcePath

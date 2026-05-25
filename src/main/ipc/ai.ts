@@ -55,6 +55,8 @@ Title rules (very important):
 - Be concise and ideally under 70 characters; never exceed 200 characters.
 - Describe the unique visual content in one short, natural phrase.
 - Must NOT be a comma-separated keyword list.
+- Must be based on the visible content, not the source filename or file path.
+- Do NOT include random file IDs, stock-site names, generator names, usernames, "via ...", "Firefly", "Auto", or similar filename suffixes.
 - Include the most important searchable terms naturally in the phrase.
 - Avoid brand names, logos, copyrighted characters, artist names, trademarks, and misleading terms.
 - Must be suitable for use as a file name (no slashes, no quotes, no leading/trailing punctuation).

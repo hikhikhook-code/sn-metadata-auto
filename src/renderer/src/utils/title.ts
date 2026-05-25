@@ -68,6 +68,23 @@ export interface CleanedAiTitle {
 }
 
 const KEYWORD_LIST_RE = /(?:^|\s)([\p{L}\p{N}'-]+\s*,\s*){3,}[\p{L}\p{N}'-]+/u
+const TRAILING_RANDOM_TOKEN_RE = /\s+\b(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{5,12}\b$/i
+const FILENAME_SOURCE_SUFFIX_RE =
+  /\s+(?:via\s+.*|(?:from|by)\s+.*|(?:adobe\s+)?firefly(?:\s+auto)?|stock|generated\s+by\s+.*|ai\s+generated)$/i
+
+function stripFilenameArtifacts(raw: string): string {
+  let out = raw
+  let prev = ''
+  while (out && out !== prev) {
+    prev = out
+    out = out
+      .replace(FILENAME_SOURCE_SUFFIX_RE, '')
+      .replace(TRAILING_RANDOM_TOKEN_RE, '')
+      .replace(/\s+[-–—|·]\s*$/u, '')
+      .trim()
+  }
+  return out
+}
 
 /**
  * Post-process a raw AI title:
@@ -90,7 +107,8 @@ export function cleanAiTitle(raw: string): CleanedAiTitle {
 
   // If it looks like a keyword list (3+ commas), shorten to the first phrase
   // before the first comma so the title is descriptive rather than a tag list.
-  let working = stripped
+  let working = stripFilenameArtifacts(stripped)
+  if (!working) working = stripped
   if (KEYWORD_LIST_RE.test(stripped)) {
     const firstChunk = stripped.split(/[,;|]/)[0].trim()
     if (firstChunk.length >= 12) working = firstChunk

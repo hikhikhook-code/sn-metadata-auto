@@ -34,7 +34,11 @@ const PREVIEW_MIME_BY_EXT: Record<string, string> = {
   webp: 'image/webp',
   gif: 'image/gif',
   bmp: 'image/bmp',
-  svg: 'image/svg+xml'
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  avi: 'video/x-msvideo',
+  webm: 'video/webm'
 }
 
 function createWindow(): void {
@@ -82,11 +86,8 @@ app.whenReady().then(() => {
   protocol.handle('snfile', async (request) => {
     try {
       const url = new URL(request.url)
-      let raw = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
-      // url.pathname is like "/C:/path/file.png" on Windows or "/home/x/file.png".
-      // After stripping the leading slashes we have a Windows path with a
-      // drive letter, or a POSIX path that needs its leading slash restored.
-      if (process.platform !== 'win32') raw = '/' + raw
+      const raw = url.searchParams.get('path')
+      if (!raw) return new Response('Missing path', { status: 400 })
       const data = await fs.readFile(raw)
       const ext = extname(raw).slice(1).toLowerCase()
       const mime = PREVIEW_MIME_BY_EXT[ext] ?? 'application/octet-stream'
